@@ -13,7 +13,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(PersistentEntitySectionManager.class)
 public class PersistentEntitySectionManager_scarpetMixin
 {
-    @Inject(method = "addEntity(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z", at = @At(
+    /**
+     * NeoForge moves vanilla's entity insertion body out of addEntity(T, boolean)
+     * into addEntityWithoutEvent(T, boolean), leaving addEntity as an event wrapper.
+     * Keep Carpet's entity lifecycle hook on the vanilla insertion path itself.
+     */
+    @Inject(method = "addEntityWithoutEvent(Lnet/minecraft/world/level/entity/EntityAccess;Z)Z", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/entity/Visibility;isTicking()Z"
     ))
