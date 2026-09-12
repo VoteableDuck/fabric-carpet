@@ -18,18 +18,24 @@ jobs:
       - name: Apply exact NeoForge compatibility guard
         run: |
           python3 - <<'PY'
+          import re
           from pathlib import Path
 
           path = Path('src/main/java/carpet/helpers/RedstoneWireTurbo.java')
           text = path.read_text(encoding='utf-8')
-          old = '''        UpdateNode center_up = upd.neighbor_nodes[1];
-          boolean center_up_is_cube = center_up.currentState.isRedstoneConductor(worldIn, center_up.self);'''
-          new = '''        UpdateNode center_up = upd.neighbor_nodes[1];
-          if (center_up == null) return state;
-          boolean center_up_is_cube = center_up.currentState.isRedstoneConductor(worldIn, center_up.self);'''
-          if text.count(old) != 1:
-              raise SystemExit(f'Expected exactly one guard target, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          pattern = re.compile(
+              r'(?m)^(?P<indent>[ \t]*)UpdateNode center_up = upd\.neighbor_nodes\[1\];\n'
+              r'(?P=indent)boolean center_up_is_cube = center_up\.currentState\.isRedstoneConductor\(worldIn, center_up\.self\);'
+          )
+          replacement = (
+              r'\g<indent>UpdateNode center_up = upd.neighbor_nodes[1];\n'
+              r'\g<indent>if (center_up == null) return state;\n'
+              r'\g<indent>boolean center_up_is_cube = center_up.currentState.isRedstoneConductor(worldIn, center_up.self);'
+          )
+          updated, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one guard target, found {count}')
+          path.write_text(updated, encoding='utf-8')
           PY
       - name: Commit source patch and remove one-shot workflow
         run: |
