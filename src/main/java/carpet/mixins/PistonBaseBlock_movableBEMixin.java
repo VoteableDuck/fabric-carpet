@@ -24,7 +24,6 @@ import net.minecraft.world.level.material.PushReaction;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
@@ -60,10 +59,10 @@ public abstract class PistonBaseBlock_movableBEMixin extends DirectionalBlock
                        && block != Blocks.SCULK_SENSOR && block != Blocks.CALIBRATED_SCULK_SENSOR; // these have weird behaviour and crashes, #1473, also #1885
     }
     
-    @Redirect(method = "isPushable", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;hasBlockEntity()Z"))
-    private static boolean ifHasBlockEntity(BlockState blockState)
+    @WrapOperation(method = "isPushable", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/state/BlockState;hasBlockEntity()Z"))
+    private static boolean ifHasBlockEntity(BlockState blockState, Operation<Boolean> original)
     {
-        if (!blockState.hasBlockEntity())
+        if (!original.call(blockState))
         {
             return false;
         }
@@ -73,14 +72,14 @@ public abstract class PistonBaseBlock_movableBEMixin extends DirectionalBlock
         }
     }
 
-    @Redirect(method = "isPushable", at = @At(
+    @WrapOperation(method = "isPushable", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/block/state/BlockState;getPistonPushReaction()Lnet/minecraft/world/level/material/PushReaction;"
     ))
-    private static PushReaction moveGrindstones(BlockState blockState)
+    private static PushReaction moveGrindstones(BlockState blockState, Operation<PushReaction> original)
     {
         if (CarpetSettings.movableBlockEntities && blockState.getBlock() == Blocks.GRINDSTONE) return PushReaction.NORMAL;
-        return blockState.getPistonPushReaction();
+        return original.call(blockState);
     }
 
     @Inject(method = "moveBlocks", at = @At(value = "INVOKE", shift = At.Shift.BEFORE,
