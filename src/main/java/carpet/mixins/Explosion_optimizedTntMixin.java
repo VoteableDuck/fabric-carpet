@@ -26,7 +26,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -57,7 +56,7 @@ public abstract class Explosion_optimizedTntMixin
     {
         if (eLogger != null)
         {
-            eLogger.setAffectBlocks( ! list.isEmpty());
+            eLogger.setAffectBlocks(!list.isEmpty());
             eLogger.onExplosionDone(this.level.getGameTime());
         }
         if (CarpetSettings.explosionNoBlockDamage)
@@ -66,21 +65,29 @@ public abstract class Explosion_optimizedTntMixin
         }
     }
 
-    //optional due to Overwrite in Lithium
-    //should kill most checks if no block damage is requested
-    @Redirect(method = "calculateExplodedPositions", require = 0, at = @At(value = "INVOKE",
-            target ="Lnet/minecraft/world/level/ExplosionDamageCalculator;getBlockExplosionResistance(Lnet/minecraft/world/level/Explosion;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/material/FluidState;)Ljava/util/Optional;"))
-    private Optional<Float> noBlockCalcsWithNoBLockDamage(final ExplosionDamageCalculator instance, final Explosion explosion, final BlockGetter blockGetter, final BlockPos blockPos, final BlockState blockState, final FluidState fluidState)
+    // Optional due to Overwrite in Lithium. If block damage is disabled, use
+    // bedrock resistance; otherwise preserve the complete wrapped operation.
+    @WrapOperation(method = "calculateExplodedPositions", require = 0, at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/level/ExplosionDamageCalculator;getBlockExplosionResistance(Lnet/minecraft/world/level/Explosion;Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/material/FluidState;)Ljava/util/Optional;"))
+    private Optional<Float> noBlockCalcsWithNoBlockDamage(
+            ExplosionDamageCalculator instance,
+            Explosion explosion,
+            BlockGetter blockGetter,
+            BlockPos blockPos,
+            BlockState blockState,
+            FluidState fluidState,
+            Operation<Optional<Float>> original)
     {
-        if (CarpetSettings.explosionNoBlockDamage) return Optional.of(Blocks.BEDROCK.getExplosionResistance());
-        return instance.getBlockExplosionResistance(explosion, blockGetter, blockPos, blockState, fluidState);
+        if (CarpetSettings.explosionNoBlockDamage)
+            return Optional.of(Blocks.BEDROCK.getExplosionResistance());
+        return original.call(instance, explosion, blockGetter, blockPos, blockState, fluidState);
     }
 
     @Inject(method = "<init>",
             at = @At(value = "RETURN"))
     private void onExplostion(ServerLevel world, Entity entity, DamageSource damageSource, final ExplosionDamageCalculator explosionBehavior, final Vec3 vec3, final float power, final boolean createFire, final Explosion.BlockInteraction destructionType, final CallbackInfo ci)
     {
-        if (LoggerRegistry.__explosions && ! world.isClientSide())
+        if (LoggerRegistry.__explosions && !world.isClientSide())
         {
             eLogger = new ExplosionLogHelper(vec3.x, vec3.y, vec3.z, power, createFire, destructionType, level.registryAccess());
         }
