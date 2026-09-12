@@ -129,6 +129,35 @@ jobs:
           fi
           exit "$status"
 
+      - name: Install production NeoForge client
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROD_CLIENT_DIR="$RUNNER_TEMP/neoforge-prod-client"
+          mkdir -p "$PROD_CLIENT_DIR/mods"
+          echo '{}' > "$PROD_CLIENT_DIR/launcher_profiles.json"
+
+          curl --fail --location --retry 3 \
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.11.45/neoforge-21.11.45-installer.jar" \
+            --output "$PROD_CLIENT_DIR/neoforge-installer.jar"
+
+          (
+            cd "$PROD_CLIENT_DIR"
+            java -jar neoforge-installer.jar --install-client "$PROD_CLIENT_DIR"
+          )
+          cp artifact/*.jar "$PROD_CLIENT_DIR/mods/"
+
+      - name: Production client JAR smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          xvfb-run -a python3 .github/scripts/production_client_smoke.py \
+            --install-dir "$RUNNER_TEMP/neoforge-prod-client" \
+            --minecraft-version 1.21.11 \
+            --neoforge-version 21.11.45 \
+            --assets-dir "$HOME/.gradle/caches/neoformruntime/assets" \
+            --timeout 120
+
       - name: Upload JAR
         uses: actions/upload-artifact@v4
         with:
