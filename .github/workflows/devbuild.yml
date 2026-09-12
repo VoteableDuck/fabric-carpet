@@ -67,8 +67,6 @@ jobs:
             echo 'eula=true' > eula.txt
             cp "$GITHUB_WORKSPACE"/artifact/*.jar mods/
 
-            # Put the server in its own process group so a successful smoke test
-            # can stop it immediately instead of waiting for a fixed timeout.
             setsid ./run.sh nogui > production-server.log 2>&1 &
             server_pid=$!
             ready=0
@@ -116,19 +114,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb
 
-      - name: Development client startup smoke test
-        shell: bash
-        run: |
-          set +e
-          timeout 180s xvfb-run -a ./gradlew --no-daemon runClient --stacktrace
-          status=$?
-          set -e
-          if [ "$status" -eq 124 ]; then
-            echo "Minecraft development client remained alive for 180 seconds; treating startup smoke test as passed."
-            exit 0
-          fi
-          exit "$status"
-
       - name: Install production NeoForge client
         shell: bash
         run: |
@@ -147,6 +132,9 @@ jobs:
           )
           cp artifact/*.jar "$PROD_CLIENT_DIR/mods/"
 
+      - name: Prepare client assets
+        run: ./gradlew --no-daemon downloadAssets
+
       - name: Production client JAR smoke test
         shell: bash
         run: |
@@ -157,6 +145,19 @@ jobs:
             --neoforge-version 21.11.45 \
             --assets-dir "$HOME/.gradle/caches/neoformruntime/assets" \
             --timeout 120
+
+      - name: Development client startup smoke test
+        shell: bash
+        run: |
+          set +e
+          timeout 180s xvfb-run -a ./gradlew --no-daemon runClient --stacktrace
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ]; then
+            echo "Minecraft development client remained alive for 180 seconds; treating startup smoke test as passed."
+            exit 0
+          fi
+          exit "$status"
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
