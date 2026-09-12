@@ -4,10 +4,12 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -30,6 +32,7 @@ public final class FabricLoader {
     private static final String MINECRAFT_MOD_ID = "minecraft";
     private static final String MINECRAFT_VERSION = "1.21.11";
     private static final String CARPET_BASE_VERSION = "1.4.194";
+    private static final Pattern MOD_ID_LINE = Pattern.compile("(?m)^\\s*modId\\s*=\\s*\"([^\"]+)\"\\s*$");
     private static final Pattern MOD_VERSION_LINE = Pattern.compile("(?m)^\\s*version\\s*=\\s*\"([^\"]+)\"\\s*$");
 
     private volatile String earlyCarpetVersion;
@@ -84,32 +87,50 @@ public final class FabricLoader {
 
     /**
      * processResources expands ${version} in neoforge.mods.toml for both the
-     * development run directory and the distributable JAR. Reading that resource
-     * gives early bootstrap the exact same Carpet build version that FML will
-     * expose later, without depending on ModList initialization order.
+     * development run directory and the distributable JAR. A NeoForge classloader
+     * can expose several resources with that same path, so inspect all of them and
+     * only accept the [[mods]] block whose own modId is Carpet. Dependency blocks
+     * mentioning Carpet must not be mistaken for Carpet's metadata.
      */
     private static Optional<String> readCarpetVersionFromMetadata() {
         ClassLoader loader = FabricLoader.class.getClassLoader();
-        try (InputStream input = loader.getResourceAsStream("META-INF/neoforge.mods.toml")) {
-            if (input == null) return Optional.empty();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
-                StringBuilder toml = new StringBuilder();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    toml.append(line).append('\n');
-                }
-                Matcher matcher = MOD_VERSION_LINE.matcher(toml);
-                if (matcher.find()) {
-                    String version = matcher.group(1).trim();
-                    if (!version.isEmpty() && !version.contains("${")) {
-                        return Optional.of(version);
+        try {
+            Enumeration<URL> resources = loader.getResources("META-INF/neoforge.mods.toml");
+            while (resources.hasMoreElements()) {
+                URL resource = resources.nextElement();
+                try (InputStream input = resource.openStream();
+                     BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                    StringBuilder toml = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        toml.append(line).append('\n');
+                    }
+
+                    String[] modSections = toml.toString().split("\\[\\[mods]]");
+                    for (int i = 1; i < modSections.length; i++) {
+                        String section = modSections[i];
+                        int nextTable = section.indexOf("[[");
+                        if (nextTable >= 0) section = section.substring(0, nextTable);
+
+                        Matcher idMatcher = MOD_ID_LINE.matcher(section);
+                        if (!idMatcher.find() || !CARPET_MOD_ID.equals(idMatcher.group(1).trim())) {
+                            continue;
+                        }
+
+                        Matcher versionMatcher = MOD_VERSION_LINE.matcher(section);
+                        if (versionMatcher.find()) {
+                            String version = versionMatcher.group(1).trim();
+                            if (!version.isEmpty() && !version.contains("${")) {
+                                return Optional.of(version);
+                            }
+                        }
                     }
                 }
             }
         } catch (IOException ignored) {
             // The compatibility facade must remain safe during crash/bootstrap
             // reporting. Falling back to Carpet's base version is preferable to
-            // turning an unavailable metadata resource into a bootstrap failure.
+            // turning unavailable metadata into a bootstrap failure.
         }
         return Optional.empty();
     }
