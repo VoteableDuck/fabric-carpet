@@ -15,8 +15,7 @@ import carpet.utils.CommandHelper;
 import carpet.utils.SpawnReporter;
 import com.mojang.brigadier.CommandDispatcher;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.ModContainer;
+import carpet.neoforge.CarpetPlatform;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.blocks.BlockInput;
 import net.minecraft.core.BlockPos;
@@ -153,15 +152,15 @@ public class Vanilla
 
     public static boolean isDevelopmentEnvironment()
     {
-        return FabricLoader.getInstance().isDevelopmentEnvironment();
+        return CarpetPlatform.isDevelopmentEnvironment();
     }
 
     public static MapValue getServerMods(MinecraftServer server)
     {
         Map<Value, Value> ret = new HashMap<>();
-        for (ModContainer mod : FabricLoader.getInstance().getAllMods())
+        for (CarpetPlatform.ModInfo mod : CarpetPlatform.getAllMods())
         {
-            ret.put(new StringValue(mod.getMetadata().getId()), new StringValue(mod.getMetadata().getVersion().getFriendlyString()));
+            ret.put(new StringValue(mod.id()), new StringValue(mod.version()));
         }
         return MapValue.wrap(ret);
     }

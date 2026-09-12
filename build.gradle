@@ -194,3 +194,22 @@ publishing {
         }
     }
 }
+
+
+tasks.register('checkNoBundledFabricNamespaces') {
+    group = 'verification'
+    description = 'Fails if the NeoForge port ships compatibility classes in Fabric API/Loader namespaces.'
+    doLast {
+        def forbidden = [
+                file('src/main/java/net/fabricmc/api'),
+                file('src/main/java/net/fabricmc/loader')
+        ].findAll { it.exists() }
+        if (!forbidden.isEmpty()) {
+            throw new GradleException('NeoForge Carpet must not bundle net.fabricmc API/Loader classes: ' + forbidden)
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('checkNoBundledFabricNamespaces')
+}

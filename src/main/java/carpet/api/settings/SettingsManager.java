@@ -46,8 +46,7 @@ import carpet.utils.CommandHelper;
 import carpet.utils.Messenger;
 import carpet.utils.TranslationKeys;
 import carpet.utils.Translations;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.FabricLoader;
+import carpet.neoforge.CarpetPlatform;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -462,9 +461,9 @@ public class SettingsManager {
         }
         catch (NoSuchFileException e)
         {
-            if (path.equals(getFile()) && FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT)
+            if (path.equals(getFile()) && CarpetPlatform.isClient())
             {
-                Path defaultsPath = FabricLoader.getInstance().getConfigDir().resolve("carpet/default_"+identifier+".conf");
+                Path defaultsPath = CarpetPlatform.getConfigDir().resolve("carpet/default_"+identifier+".conf");
                 try {
                     if (Files.notExists(defaultsPath))
                     {

@@ -20,13 +20,7 @@ import carpet.script.value.MapValue;
 import carpet.script.value.StringValue;
 import carpet.utils.CarpetProfiler;
 import carpet.utils.Messenger;
-import net.fabricmc.api.EnvType;
-import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.loader.api.ModContainer;
-import net.fabricmc.loader.api.SemanticVersion;
-import net.fabricmc.loader.api.Version;
-import net.fabricmc.loader.api.VersionParsingException;
-import net.fabricmc.loader.api.metadata.version.VersionPredicate;
+import carpet.neoforge.CarpetPlatform;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
@@ -150,9 +144,9 @@ public class Carpet
     @Nullable
     public static Module fetchGlobalModule(String name, boolean allowLibraries) throws IOException
     {
-        if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT)
+        if (CarpetPlatform.isClient())
         {
-            Path globalFolder = FabricLoader.getInstance().getConfigDir().resolve("carpet/scripts");
+            Path globalFolder = CarpetPlatform.getConfigDir().resolve("carpet/scripts");
             if (!Files.exists(globalFolder))
             {
                 Files.createDirectories(globalFolder);
@@ -174,9 +168,9 @@ public class Carpet
 
     public static void addGlobalModules(final List<String> moduleNames, boolean includeBuiltIns) throws IOException
     {
-        if (includeBuiltIns && (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT))
+        if (includeBuiltIns && (CarpetPlatform.isClient()))
         {
-            Path globalScripts = FabricLoader.getInstance().getConfigDir().resolve("carpet/scripts");
+            Path globalScripts = CarpetPlatform.getConfigDir().resolve("carpet/scripts");
             if (!Files.exists(globalScripts))
             {
                 Files.createDirectories(globalScripts);
@@ -192,24 +186,16 @@ public class Carpet
 
     public static void assertRequirementMet(CarpetScriptHost host, String requiredModId, String stringPredicate)
     {
-        VersionPredicate predicate;
         try
         {
-            predicate = VersionPredicate.parse(stringPredicate);
-        }
-        catch (VersionParsingException e)
-        {
-            throw new InternalExpressionException("Failed to parse version conditions for '" + requiredModId + "' in 'requires': " + e.getMessage());
-        }
-
-        ModContainer mod = FabricLoader.getInstance().getModContainer(requiredModId).orElse(null);
-        if (mod != null)
-        {
-            Version presentVersion = mod.getMetadata().getVersion();
-            if (predicate.test(presentVersion) || (FabricLoader.getInstance().isDevelopmentEnvironment() && !(presentVersion instanceof SemanticVersion)))
-            { // in a dev env, mod version is usually replaced with ${version}, and that isn't semantic
+            if (CarpetPlatform.modVersionMatches(requiredModId, stringPredicate))
+            {
                 return;
             }
+        }
+        catch (CarpetPlatform.VersionParsingException e)
+        {
+            throw new InternalExpressionException("Failed to parse version conditions for '" + requiredModId + "' in 'requires': " + e.getMessage());
         }
         throw new LoadException(String.format("%s requires a version of mod '%s' matching '%s', which is missing!", host.getVisualName(), requiredModId, stringPredicate));
     }

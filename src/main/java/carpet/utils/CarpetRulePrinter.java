@@ -6,8 +6,7 @@ import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
 import joptsimple.util.PathConverter;
 import joptsimple.util.PathProperties;
-import net.fabricmc.api.DedicatedServerModInitializer;
-import net.fabricmc.loader.api.FabricLoader;
+import carpet.neoforge.CarpetPlatform;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -25,12 +24,11 @@ import org.slf4j.LoggerFactory;
  * category filter
  *
  */
-public class CarpetRulePrinter implements DedicatedServerModInitializer {
-    @Override
+public class CarpetRulePrinter {
     public void onInitializeServer() {
         // When launching, we use the "--" separator to prevent the game rejecting to launch because of unknown options
         // Clear it in case it's present given else our option parser would also ignore them!
-        String[] args = Arrays.stream(FabricLoader.getInstance().getLaunchArguments(true)).filter(opt -> !opt.equals("--")).toArray(String[]::new);
+        String[] args = Arrays.stream(CarpetPlatform.getLaunchArguments(true)).filter(opt -> !opt.equals("--")).toArray(String[]::new);
 
         // Prepare an OptionParser for our parameters
         OptionParser parser = new OptionParser();
