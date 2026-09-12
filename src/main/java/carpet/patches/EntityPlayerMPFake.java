@@ -187,6 +187,12 @@ public class EntityPlayerMPFake extends ServerPlayer
     }
 
     @Override
+    public boolean isFakePlayer()
+    {
+        return true;
+    }
+
+    @Override
     public void onEquipItem(final EquipmentSlot slot, final ItemStack previous, final ItemStack stack)
     {
         if (!isUsingItem()) super.onEquipItem(slot, previous, stack);
