@@ -348,21 +348,76 @@ public final class CarpetPlatform {
                 }
             }
             if (raw.isBlank()) throw new VersionParsingException("Missing version in predicate term: " + token);
-            if (raw.contains("*") || raw.contains("x") || raw.contains("X")) {
-                SemanticVersion pattern = SemanticVersion.parse(raw);
+
+            if (hasWildcardComponent(raw)) {
+                if (!operator.equals("=") && !operator.equals("==")) {
+                    throw new VersionParsingException(
+                            "Version ranges with wildcards require equality/no operator: " + token);
+                }
+                SemanticVersion pattern = parseWildcardPattern(raw);
                 return version -> wildcardMatches(version, pattern);
             }
-            SemanticVersion target = SemanticVersion.parse(raw);
+
+            VersionValue target = VersionValue.parse(raw);
+            if (!(target instanceof SemanticVersion semanticTarget)) {
+                if (operator.equals(">") || operator.equals("<")) {
+                    throw new VersionParsingException(
+                            "Exclusive version ranges require semantic versions: " + token);
+                }
+                // Fabric Loader reduces inclusive comparisons against a non-semver
+                // value to exact friendly-string equality.
+                return version -> version.friendlyString().equals(target.friendlyString());
+            }
+
             return switch (operator) {
-                case ">=" -> version -> version.compareTo(target) >= 0;
-                case "<=" -> version -> version.compareTo(target) <= 0;
-                case ">" -> version -> version.compareTo(target) > 0;
-                case "<" -> version -> version.compareTo(target) < 0;
-                case "~" -> bounded(target, tildeUpperBound(target));
-                case "^" -> bounded(target, caretUpperBound(target));
-                case "=", "==" -> version -> version.compareTo(target) == 0;
+                case ">=" -> version -> version.compareTo(semanticTarget) >= 0;
+                case "<=" -> version -> version.compareTo(semanticTarget) <= 0;
+                case ">" -> version -> version.compareTo(semanticTarget) > 0;
+                case "<" -> version -> version.compareTo(semanticTarget) < 0;
+                case "~" -> bounded(semanticTarget, tildeUpperBound(semanticTarget));
+                case "^" -> bounded(semanticTarget, caretUpperBound(semanticTarget));
+                case "=", "==" -> version -> version.compareTo(semanticTarget) == 0;
                 default -> throw new VersionParsingException("Unsupported version predicate operator: " + operator);
             };
+        }
+
+        private static boolean hasWildcardComponent(String raw) {
+            String core = raw;
+            int plus = core.indexOf('+');
+            if (plus >= 0) core = core.substring(0, plus);
+            int dash = core.indexOf('-');
+            if (dash >= 0) core = core.substring(0, dash);
+            for (String component : core.split("\\.", -1)) {
+                if (isWildcardComponent(component)) return true;
+            }
+            return false;
+        }
+
+        private static SemanticVersion parseWildcardPattern(String raw) throws VersionParsingException {
+            String core = raw;
+            int plus = core.indexOf('+');
+            if (plus >= 0) core = core.substring(0, plus);
+            int dash = core.indexOf('-');
+            if (dash >= 0) {
+                throw new VersionParsingException("Pre-release versions cannot use wildcard ranges: " + raw);
+            }
+            String[] components = core.split("\\.", -1);
+            int firstWildcard = -1;
+            for (int i = 0; i < components.length; i++) {
+                if (isWildcardComponent(components[i])) {
+                    if (firstWildcard < 0) firstWildcard = i;
+                } else if (firstWildcard >= 0) {
+                    throw new VersionParsingException("Interjacent wildcard ranges are not allowed: " + raw);
+                }
+            }
+            if (firstWildcard <= 0) {
+                throw new VersionParsingException("Wildcard range must follow a numeric component: " + raw);
+            }
+            return SemanticVersion.parse(raw);
+        }
+
+        private static boolean isWildcardComponent(String component) {
+            return component.equals("*") || component.equals("x") || component.equals("X");
         }
 
         private static Predicate<VersionValue> bounded(SemanticVersion lower, SemanticVersion upper) {
@@ -371,19 +426,13 @@ public final class CarpetPlatform {
 
         private static SemanticVersion tildeUpperBound(SemanticVersion target) throws VersionParsingException {
             int major = target.component(0);
-            int minor = target.componentCount() > 1 ? target.component(1) : 0;
-            return target.componentCount() <= 1
-                    ? SemanticVersion.parse((major + 1) + ".0.0")
-                    : SemanticVersion.parse(major + "." + (minor + 1) + ".0");
+            int minor = target.component(1);
+            return SemanticVersion.parse(major + "." + (minor + 1) + ".0");
         }
 
         private static SemanticVersion caretUpperBound(SemanticVersion target) throws VersionParsingException {
             int major = target.component(0);
-            int minor = target.componentCount() > 1 ? target.component(1) : 0;
-            int patch = target.componentCount() > 2 ? target.component(2) : 0;
-            if (major > 0) return SemanticVersion.parse((major + 1) + ".0.0");
-            if (minor > 0) return SemanticVersion.parse("0." + (minor + 1) + ".0");
-            return SemanticVersion.parse("0.0." + (patch + 1));
+            return SemanticVersion.parse((major + 1) + ".0.0");
         }
 
         private static boolean wildcardMatches(VersionValue version, SemanticVersion pattern) {
