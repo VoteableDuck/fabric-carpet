@@ -427,12 +427,15 @@ public final class CarpetPlatform {
         private static SemanticVersion tildeUpperBound(SemanticVersion target) throws VersionParsingException {
             int major = target.component(0);
             int minor = target.component(1);
-            return SemanticVersion.parse(major + "." + (minor + 1) + ".0");
+            // Fabric uses an empty prerelease key on the exclusive upper bound,
+            // so e.g. ~1.2 excludes 1.3.0-alpha rather than only 1.3.0 itself.
+            return SemanticVersion.parse(major + "." + (minor + 1) + ".0-");
         }
 
         private static SemanticVersion caretUpperBound(SemanticVersion target) throws VersionParsingException {
             int major = target.component(0);
-            return SemanticVersion.parse((major + 1) + ".0.0");
+            // Same Fabric sentinel here: ^1.2.3 must exclude 2.0.0 prereleases.
+            return SemanticVersion.parse((major + 1) + ".0.0-");
         }
 
         private static boolean wildcardMatches(VersionValue version, SemanticVersion pattern) {
