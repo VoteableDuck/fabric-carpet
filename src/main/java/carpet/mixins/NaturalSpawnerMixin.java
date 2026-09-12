@@ -3,6 +3,8 @@ package carpet.mixins;
 import carpet.CarpetSettings;
 import carpet.fakes.LevelInterface;
 import carpet.utils.SpawnReporter;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.entity.EntitySpawnReason;
 import org.apache.commons.lang3.tuple.Pair;
 import org.spongepowered.asm.mixin.Final;
@@ -10,7 +12,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.List;
@@ -46,12 +47,12 @@ public class NaturalSpawnerMixin
 
     @Shadow @Final private static MobCategory[] SPAWNING_CATEGORIES;
 
-    @Redirect(method = "isValidSpawnPostitionForType",
+    @WrapOperation(method = "isValidSpawnPostitionForType",
             at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;noCollision(Lnet/minecraft/world/phys/AABB;)Z"
     ))
-    private static boolean doesNotCollide(ServerLevel world, AABB bb)
+    private static boolean doesNotCollide(ServerLevel world, AABB bb, Operation<Boolean> original)
     {
         //.doesNotCollide is VERY expensive. On the other side - most worlds are not made of trapdoors in
         // various configurations, but solid and 'passable' blocks, like air, water grass, etc.
@@ -59,7 +60,7 @@ public class NaturalSpawnerMixin
         // in case something more complex happens - we default to full block collision check
         if (!CarpetSettings.lagFreeSpawning)
         {
-            return world.noCollision(bb);
+            return original.call(world, bb);
         }
         int minX = Mth.floor(bb.minX);
         int minY = Mth.floor(bb.minY);
@@ -80,7 +81,7 @@ public class NaturalSpawnerMixin
                     }
                     else
                     {
-                        return world.noCollision(bb);
+                        return original.call(world, bb);
                     }
                 }
             }
@@ -103,7 +104,7 @@ public class NaturalSpawnerMixin
                         }
                         else
                         {
-                            return world.noCollision(bb);
+                            return original.call(world, bb);
                         }
                     }
                 }
@@ -123,7 +124,7 @@ public class NaturalSpawnerMixin
                         ((block instanceof FenceGateBlock) && !state.getValue(FenceGateBlock.OPEN))
                 )
                 {
-                    if (x == minX || x == maxX || z == minZ || z == maxZ) return world.noCollision(bb);
+                    if (x == minX || x == maxX || z == minZ || z == maxZ) return original.call(world, bb);
                     return false;
                 }
             }
@@ -131,11 +132,12 @@ public class NaturalSpawnerMixin
         return true;
     }
 
-    @Redirect(method = "getMobForSpawn", at = @At(
+    @WrapOperation(method = "getMobForSpawn", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/EntityType;create(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/EntitySpawnReason;)Lnet/minecraft/world/entity/Entity;"
     ))
-    private static Entity create(final EntityType entityType, final Level world_1, final EntitySpawnReason entitySpawnReason)
+    private static Entity create(final EntityType entityType, final Level world_1, final EntitySpawnReason entitySpawnReason,
+                                 Operation<Entity> original)
     {
         if (CarpetSettings.lagFreeSpawning)
         {
@@ -143,18 +145,18 @@ public class NaturalSpawnerMixin
             if (precookedMobs.containsKey(entityType))
                 //this mob has been <init>'s but not used yet
                 return precookedMobs.get(entityType);
-            Entity e = entityType.create(world_1, entitySpawnReason);
+            Entity e = original.call(entityType, world_1, entitySpawnReason);
             precookedMobs.put(entityType, e);
             return e;
         }
-        return entityType.create(world_1, entitySpawnReason);
+        return original.call(entityType, world_1, entitySpawnReason);
     }
 
-    @Redirect(method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V", at = @At(
+    @WrapOperation(method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;addFreshEntityWithPassengers(Lnet/minecraft/world/entity/Entity;)V"
     ))
-    private static void spawnEntity(ServerLevel world, Entity entity_1,
+    private static void spawnEntity(ServerLevel world, Entity entity_1, Operation<Void> original,
                                     MobCategory group, ServerLevel world2, ChunkAccess chunk, BlockPos pos, NaturalSpawner.SpawnPredicate checker, NaturalSpawner.AfterSpawnCallback runner)
     {
         if (CarpetSettings.lagFreeSpawning)
@@ -170,29 +172,30 @@ public class NaturalSpawnerMixin
                     entity_1.blockPosition());
         }
         if (!SpawnReporter.mockSpawns)
-            world.addFreshEntityWithPassengers(entity_1);
+            original.call(world, entity_1);
             //world.spawnEntity(entity_1);
     }
 
-    @Redirect(method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V", at = @At(
+    @WrapOperation(method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Mob;finalizeSpawn(Lnet/minecraft/world/level/ServerLevelAccessor;Lnet/minecraft/world/DifficultyInstance;Lnet/minecraft/world/entity/EntitySpawnReason;Lnet/minecraft/world/entity/SpawnGroupData;)Lnet/minecraft/world/entity/SpawnGroupData;"
     ))
-    private static SpawnGroupData spawnEntity(Mob mobEntity, ServerLevelAccessor serverWorldAccess, DifficultyInstance difficulty, EntitySpawnReason spawnReason, SpawnGroupData entityData)
+    private static SpawnGroupData spawnEntity(Mob mobEntity, ServerLevelAccessor serverWorldAccess, DifficultyInstance difficulty,
+                                               EntitySpawnReason spawnReason, SpawnGroupData entityData, Operation<SpawnGroupData> original)
     {
         if (!SpawnReporter.mockSpawns) // WorldAccess
-            return mobEntity.finalizeSpawn(serverWorldAccess, difficulty, spawnReason, entityData);
+            return original.call(mobEntity, serverWorldAccess, difficulty, spawnReason, entityData);
         return null;
     }
 
-    @Redirect(method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V", at = @At(
+    @WrapOperation(method = "spawnCategoryForPosition(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/ChunkAccess;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/player/Player;distanceToSqr(DDD)D"
     ))
-    private static double getSqDistanceTo(Player playerEntity, double double_1, double double_2, double double_3,
+    private static double getSqDistanceTo(Player playerEntity, double double_1, double double_2, double double_3, Operation<Double> original,
                                           MobCategory entityCategory, ServerLevel serverWorld, ChunkAccess chunk, BlockPos blockPos)
     {
-        double distanceTo = playerEntity.distanceToSqr(double_1, double_2, double_3);
+        double distanceTo = original.call(playerEntity, double_1, double_2, double_3);
         if (CarpetSettings.lagFreeSpawning && distanceTo > 16384.0D && entityCategory != MobCategory.CREATURE)
             return 0.0;
         return distanceTo;
@@ -202,16 +205,17 @@ public class NaturalSpawnerMixin
 
     ////
 
-    @Redirect(method = "spawnForChunk", at = @At(
+    @WrapOperation(method = "spawnForChunk", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/NaturalSpawner;spawnCategoryForChunk(Lnet/minecraft/world/entity/MobCategory;Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/level/chunk/LevelChunk;Lnet/minecraft/world/level/NaturalSpawner$SpawnPredicate;Lnet/minecraft/world/level/NaturalSpawner$AfterSpawnCallback;)V"
     ))
     // inject our repeat of spawns if more spawn ticks per tick are chosen.
-    private static void spawnMultipleTimes(MobCategory category, ServerLevel world, LevelChunk chunk, NaturalSpawner.SpawnPredicate checker, NaturalSpawner.AfterSpawnCallback runner)
+    private static void spawnMultipleTimes(MobCategory category, ServerLevel world, LevelChunk chunk, NaturalSpawner.SpawnPredicate checker,
+                                           NaturalSpawner.AfterSpawnCallback runner, Operation<Void> original)
     {
         for (int i = 0; i < SpawnReporter.spawn_tries.get(category); i++)
         {
-            NaturalSpawner.spawnCategoryForChunk(category, world, chunk, checker, runner);
+            original.call(category, world, chunk, checker, runner);
         }
     }
 
@@ -234,30 +238,23 @@ public class NaturalSpawnerMixin
             int int_2 = SpawnReporter.chunkCounts.get(dim); // eligible chunks for spawning
             int int_3 = newCap * int_2 / CHUNK_AREA; //current spawning limits
             int mobCount = info.getCategoryToCount().getInt(entityCategory);
-
             if (SpawnReporter.track_spawns > 0L && !SpawnReporter.first_chunk_marker.contains(entityCategory))
             {
                 SpawnReporter.first_chunk_marker.add(entityCategory);
                 //first chunk with spawn eligibility for that category
                 Pair key = Pair.of(dim, entityCategory);
-
-
                 int spawnTries = SpawnReporter.spawn_tries.get(entityCategory);
-
                 SpawnReporter.spawn_attempts.put(key,
                         SpawnReporter.spawn_attempts.get(key) + spawnTries);
-
                 SpawnReporter.spawn_cap_count.put(key,
                         SpawnReporter.spawn_cap_count.get(key) + mobCount);
             }
-
             if (mobCount <= int_3 || SpawnReporter.mock_spawns)
             {
                 //place 0 to indicate there were spawn attempts for a category
                 //if (entityCategory != EntityCategory.CREATURE || world.getServer().getTicks() % 400 == 0)
                 // this will only be called once every 400 ticks anyways
                 SpawnReporter.local_spawns.putIfAbsent(entityCategory, 0L);
-
                 //else
                 //full mobcaps - and key in local_spawns will be missing
             }
