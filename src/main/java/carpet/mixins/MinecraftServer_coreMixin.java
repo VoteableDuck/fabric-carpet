@@ -32,17 +32,9 @@ public abstract class MinecraftServer_coreMixin
         CarpetProfiler.end_current_section(token);
     }
 
-    @Inject(method = "loadLevel", at = @At("HEAD"))
-    private void serverLoaded(CallbackInfo ci)
-    {
-        CarpetServer.onServerLoaded((MinecraftServer) (Object) this);
-    }
-
-    @Inject(method = "loadLevel", at = @At("RETURN"))
-    private void serverLoadedWorlds(CallbackInfo ci)
-    {
-        CarpetServer.onServerLoadedWorlds((MinecraftServer) (Object) this);
-    }
+    // NeoForge server startup is dispatched from CarpetNeoForge using
+    // ServerAboutToStartEvent and ServerStartingEvent. Keeping loadLevel hooks
+    // here would initialize Carpet twice and can break persistent fake players.
 
     @Inject(method = "stopServer", at = @At("HEAD"))
     private void serverClosed(CallbackInfo ci)
