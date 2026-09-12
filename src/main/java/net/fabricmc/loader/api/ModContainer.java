@@ -10,13 +10,22 @@ public final class ModContainer {
     private final ModMetadata metadata;
 
     ModContainer(IModInfo info) {
+        this(info.getModId(), info.getVersion().toString());
+    }
+
+    /**
+     * Creates the small metadata view Carpet needs before NeoForge has exposed
+     * the completed ModList. This is intentionally package-private and only
+     * used by the FabricLoader compatibility facade during early bootstrap.
+     */
+    ModContainer(String modId, String versionString) {
         Version version;
         try {
-            version = SemanticVersion.parse(info.getVersion().toString());
+            version = SemanticVersion.parse(versionString);
         } catch (VersionParsingException e) {
-            version = new StringVersion(info.getVersion().toString());
+            version = new StringVersion(versionString);
         }
-        this.metadata = new ModMetadata(info.getModId(), version);
+        this.metadata = new ModMetadata(modId, version);
     }
 
     public ModMetadata getMetadata() {
