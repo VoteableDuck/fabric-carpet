@@ -39,9 +39,15 @@ public class ServerNetworkHandler
     {
         if (!((ServerGamePacketListenerImplInterface) playerEntity.connection).getConnection().isMemoryConnection())
         {
-            CompoundTag data = new CompoundTag();
-            data.putString(CarpetClient.HI, CarpetSettings.carpetVersion);
-            playerEntity.connection.send(new ClientboundCustomPayloadPacket(new CarpetClient.CarpetPayload(data)));
+            // NeoForge negotiates custom payload channels during connection setup.
+            // Carpet's channel is optional, so never send its handshake to a client
+            // that did not advertise support for it.
+            if (playerEntity.connection.hasChannel(CarpetClient.CarpetPayload.TYPE))
+            {
+                CompoundTag data = new CompoundTag();
+                data.putString(CarpetClient.HI, CarpetSettings.carpetVersion);
+                playerEntity.connection.send(new ClientboundCustomPayloadPacket(new CarpetClient.CarpetPayload(data)));
+            }
         }
         else
         {
