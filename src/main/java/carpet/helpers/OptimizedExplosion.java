@@ -35,7 +35,7 @@ public class OptimizedExplosion
 
         List<BlockPos> toBlow;
 
-        if (!CarpetSettings.explosionNoBlockDamage && eAccess.getDamageSource() != null) {
+        if (!CarpetSettings.explosionNoBlockDamage && eAccess.carpet$getDamageSource() != null) {
             rayCalcDone = false;
             firstRay = true;
             getAffectedPositionsOnPlaneY(e,  0,  0, 15,  0, 15); // bottom
@@ -133,10 +133,10 @@ public class OptimizedExplosion
         double xInc = (xRel / len) * 0.3;
         double yInc = (yRel / len) * 0.3;
         double zInc = (zRel / len) * 0.3;
-        float rand = eAccess.getLevel().random.nextFloat();
+        float rand = eAccess.carpet$getLevel().random.nextFloat();
         float sizeRand = (CarpetSettings.tntRandomRange >= 0 ? (float) CarpetSettings.tntRandomRange : rand);
-        float size = eAccess.getRadius() * (0.7F + sizeRand * 0.6F);
-        Vec3 vec3 = eAccess.getCenter();
+        float size = eAccess.carpet$getRadius() * (0.7F + sizeRand * 0.6F);
+        Vec3 vec3 = eAccess.carpet$getCenter();
         double posX = vec3.x;
         double posY = vec3.y;
         double posZ = vec3.z;
@@ -153,9 +153,9 @@ public class OptimizedExplosion
             if (state == null)
             {
                 posImmutable = posMutable.immutable();
-                state = eAccess.getLevel().getBlockState(posImmutable);
+                state = eAccess.carpet$getLevel().getBlockState(posImmutable);
                 stateCache.put(posImmutable, state);
-                fluid = eAccess.getLevel().getFluidState(posImmutable);
+                fluid = eAccess.carpet$getLevel().getFluidState(posImmutable);
                 fluidCache.put(posImmutable, fluid);
             }
 
@@ -163,9 +163,9 @@ public class OptimizedExplosion
             {
                 float resistance = Math.max(state.getBlock().getExplosionResistance(), fluid.getExplosionResistance());
 
-                if (eAccess.getSource() != null)
+                if (eAccess.carpet$getSource() != null)
                 {
-                    resistance = eAccess.getSource().getBlockExplosionResistance(e, eAccess.getLevel(), posMutable, state, fluid, resistance);
+                    resistance = eAccess.carpet$getSource().getBlockExplosionResistance(e, eAccess.carpet$getLevel(), posMutable, state, fluid, resistance);
                 }
 
                 size -= (resistance + 0.3F) * 0.3F;
@@ -173,7 +173,7 @@ public class OptimizedExplosion
 
             if (size > 0.0F)
             {
-                if ((eAccess.getSource() == null || eAccess.getSource().shouldBlockExplode(e, eAccess.getLevel(), posMutable, state, size)))
+                if ((eAccess.carpet$getSource() == null || eAccess.carpet$getSource().shouldBlockExplode(e, eAccess.carpet$getLevel(), posMutable, state, size)))
                     affectedBlockPositionsSet.add(posImmutable != null ? posImmutable : posMutable.immutable());
             }
             else if (firstRay)
