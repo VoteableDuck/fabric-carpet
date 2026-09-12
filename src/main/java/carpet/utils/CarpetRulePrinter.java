@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Provides a command line interface to generate a dump with all rules
- * in a pretty markdown format to a specified file, with an optional 
+ * in a pretty markdown format to a specified file, with an optional
  * category filter
  *
  */
