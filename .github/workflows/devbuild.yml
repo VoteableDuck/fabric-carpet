@@ -17,7 +17,7 @@ jobs:
   build:
     name: Build JAR
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
 
     steps:
       - name: Checkout
@@ -38,24 +38,6 @@ jobs:
       - name: Build
         run: ./gradlew --no-daemon clean build --stacktrace
 
-      - name: Install Xvfb
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-
-      - name: Client startup smoke test
-        shell: bash
-        run: |
-          set +e
-          timeout 180s xvfb-run -a ./gradlew --no-daemon runClient --stacktrace
-          status=$?
-          set -e
-          if [ "$status" -eq 124 ]; then
-            echo "Minecraft client remained alive for 180 seconds; treating startup smoke test as passed."
-            exit 0
-          fi
-          exit "$status"
-
       - name: Collect distributable JAR
         shell: bash
         run: |
@@ -67,6 +49,65 @@ jobs:
             -print -exec cp '{}' artifact/ \;
           test -n "$(find artifact -maxdepth 1 -type f -name '*.jar' -print -quit)"
           ls -lh artifact
+
+      - name: Production server JAR smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROD_DIR="$RUNNER_TEMP/neoforge-prod-server"
+          mkdir -p "$PROD_DIR/mods"
+
+          curl --fail --location --retry 3 \
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.11.45/neoforge-21.11.45-installer.jar" \
+            --output "$PROD_DIR/neoforge-installer.jar"
+
+          (
+            cd "$PROD_DIR"
+            java -jar neoforge-installer.jar --installServer
+            echo 'eula=true' > eula.txt
+            cp "$GITHUB_WORKSPACE"/artifact/*.jar mods/
+
+            set +e
+            timeout 180s ./run.sh nogui > production-server.log 2>&1
+            status=$?
+            set -e
+
+            cat production-server.log
+            if [ -f logs/latest.log ]; then
+              echo '===== production logs/latest.log ====='
+              cat logs/latest.log
+            fi
+
+            if grep -Eq 'Done \([0-9.]+s\)!|Done \(' production-server.log logs/latest.log 2>/dev/null; then
+              echo 'Production NeoForge server reached ready state.'
+              exit 0
+            fi
+
+            if [ "$status" -eq 124 ]; then
+              echo 'Production server stayed alive for 180 seconds but did not expose the expected ready marker.' >&2
+            else
+              echo "Production server exited before ready state with status $status." >&2
+            fi
+            exit 1
+          )
+
+      - name: Install Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+
+      - name: Development client startup smoke test
+        shell: bash
+        run: |
+          set +e
+          timeout 180s xvfb-run -a ./gradlew --no-daemon runClient --stacktrace
+          status=$?
+          set -e
+          if [ "$status" -eq 124 ]; then
+            echo "Minecraft development client remained alive for 180 seconds; treating startup smoke test as passed."
+            exit 0
+          fi
+          exit "$status"
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
