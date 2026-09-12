@@ -1,15 +1,25 @@
 package carpet.mixins;
 
-import carpet.helpers.OptimizedExplosion;
 import carpet.CarpetSettings;
+import carpet.helpers.OptimizedExplosion;
 import carpet.logging.LoggerRegistry;
 import carpet.logging.logHelpers.ExplosionLogHelper;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.breeze.Breeze;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Explosion;
+import net.minecraft.world.level.ExplosionDamageCalculator;
 import net.minecraft.world.level.ServerExplosion;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,15 +28,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.Explosion;
-import net.minecraft.world.level.ExplosionDamageCalculator;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
@@ -85,13 +86,22 @@ public abstract class Explosion_optimizedTntMixin
         }
     }
 
-    @Redirect(method = "hurtEntities",
-            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;push(Lnet/minecraft/world/phys/Vec3;)V"))
-    private void setVelocityAndUpdateLogging(Entity entity, Vec3 velocity)
+    /**
+     * NeoForge 1.21.11 routes entity damage through hurtEntities(List<BlockPos>)
+     * and adjusts the knockback vector through its explosion event immediately
+     * before Entity.push. Wrap that exact call so Carpet observes the final
+     * vector without replacing NeoForge or another mod's operation.
+     */
+    @WrapOperation(
+            method = "hurtEntities(Ljava/util/List;)V",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;push(Lnet/minecraft/world/phys/Vec3;)V")
+    )
+    private void setVelocityAndUpdateLogging(Entity entity, Vec3 velocity, Operation<Void> original)
     {
-        if (eLogger != null) {
+        if (eLogger != null)
+        {
             eLogger.onEntityImpacted(entity, velocity.subtract(entity.getDeltaMovement()));
         }
-        entity.push(velocity);
+        original.call(entity, velocity);
     }
 }
