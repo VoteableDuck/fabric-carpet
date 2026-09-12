@@ -3,8 +3,9 @@ package carpet.mixins;
 import carpet.fakes.EntityInterface;
 import carpet.fakes.ServerPlayerInterface;
 import carpet.script.EntityEventsGroup;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.authlib.GameProfile;
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,7 +22,6 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -33,8 +33,6 @@ import static carpet.script.CarpetEventServer.Event.STATISTICS;
 @Mixin(ServerPlayer.class)
 public abstract class ServerPlayer_scarpetEventMixin extends Player implements ServerPlayerInterface
 {
-    // to denote if the player reference is valid
-
     @Unique
     private boolean isInvalidReference = false;
 
@@ -42,28 +40,24 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
         super(level, gameProfile);
     }
 
-    //@Shadow protected abstract void completeUsingItem();
-
     @Shadow public boolean wonGame;
 
-    @Redirect(method = "completeUsingItem", at = @At(
+    @WrapOperation(method = "completeUsingItem", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/player/Player;completeUsingItem()V"
     ))
-    private void finishedUsingItem(Player playerEntity)
+    private void finishedUsingItem(Player playerEntity, Operation<Void> original)
     {
         if (PLAYER_FINISHED_USING_ITEM.isNeeded())
         {
             InteractionHand hand = getUsedItemHand();
-            if(!PLAYER_FINISHED_USING_ITEM.onItemAction((ServerPlayer) (Object)this, hand, getUseItem())) {
-                // do vanilla
-                super.completeUsingItem();
+            if (!PLAYER_FINISHED_USING_ITEM.onItemAction((ServerPlayer) (Object)this, hand, getUseItem())) {
+                original.call(playerEntity);
             }
         }
         else
         {
-            // do vanilla
-            super.completeUsingItem();
+            original.call(playerEntity);
         }
     }
 
@@ -90,7 +84,7 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
     private void logPreviousCoordinates(TeleportTransition serverWorld, CallbackInfoReturnable<Entity> cir)
     {
         previousLocation = position();
-        previousDimension = level().dimension();  //dimension type
+        previousDimension = level().dimension();
     }
 
     @Inject(method = "teleport", at = @At("RETURN"))
@@ -99,8 +93,7 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
         if (PLAYER_CHANGES_DIMENSION.isNeeded())
         {
             ServerPlayer player = (ServerPlayer) (Object)this;
-            TeleportTransition destinationTransition = destinationP;
-            ServerLevel destination = destinationTransition.newLevel();
+            ServerLevel destination = destinationP.newLevel();
             Vec3 to = null;
             if (!wonGame || previousDimension != Level.END || destination.dimension() != Level.OVERWORLD)
             {
@@ -108,7 +101,7 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
             }
             PLAYER_CHANGES_DIMENSION.onDimensionChange(player, previousLocation, to, previousDimension, destination.dimension());
         }
-    };
+    }
 
     @Override
     public void invalidateEntityObjectReference()
