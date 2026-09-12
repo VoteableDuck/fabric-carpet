@@ -118,7 +118,24 @@ jobs:
               echo 'setblock 5 100 0 minecraft:chest' >&3
               echo 'item replace block 5 100 0 container.0 with minecraft:diamond 3' >&3
               echo 'setblock 3 100 0 minecraft:redstone_block' >&3
-              sleep 2
+
+              # The dedicated server drains all queued console commands in a
+              # single tick. Wait until the power command itself has actually
+              # executed before sending the state checks, otherwise they can run
+              # before the piston's scheduled block event gets a chance to fire.
+              power_processed=0
+              for _ in $(seq 1 30); do
+                if grep -q 'Changed the block at 3, 100, 0' production-server.log logs/latest.log 2>/dev/null; then
+                  power_processed=1
+                  break
+                fi
+                if ! kill -0 "$server_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 1
+              done
+              test "$power_processed" -eq 1
+              sleep 1
 
               # Diagnostics remain in the log even when the hard assertions
               # below fail, separating power/pushability/final-placement bugs.
