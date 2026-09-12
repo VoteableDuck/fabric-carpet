@@ -51,6 +51,39 @@ processResources {
     }
 }
 
+def intermediaryNamePattern = ~/\b(?:class|method|field)_\d+\b/
+
+tasks.register('checkForIntermediaryNames') {
+    group = 'verification'
+    description = 'Rejects Yarn intermediary names that are invalid in production Mojang mappings.'
+    inputs.files(fileTree('src/main/java') {
+        include '**/*.java'
+    })
+
+    doLast {
+        def offenders = []
+        inputs.files.files.sort { it.path }.each { file ->
+            file.eachLine('UTF-8') { line, lineNumber ->
+                def matcher = line =~ intermediaryNamePattern
+                if (matcher.find()) {
+                    offenders << "${project.relativePath(file)}:${lineNumber}: ${matcher.group()}"
+                }
+            }
+        }
+
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                'Yarn intermediary names found in Java sources; use Mojang-mapped names instead:\n' +
+                    offenders.join('\n')
+            )
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('checkForIntermediaryNames')
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = 21
