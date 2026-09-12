@@ -94,15 +94,21 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
         }
     }
 
-    @Inject(method = "handlePlayerAction", cancellable = true, at = @At(
-            value = "INVOKE",
-            target = "Lnet/minecraft/server/level/ServerPlayer;getItemInHand(Lnet/minecraft/world/InteractionHand;)Lnet/minecraft/world/item/ItemStack;",
-            ordinal = 1, // not very robust, see spear
-            shift = At.Shift.BEFORE
-    ))
-    private void onHandSwap(ServerboundPlayerActionPacket playerActionC2SPacket_1, CallbackInfo ci)
+    /**
+     * NeoForge replaces vanilla's direct hand-stack swap with
+     * CommonHooks.onLivingSwapHandItems, so the old ordinal-based
+     * getItemInHand injection no longer exists in the production class.
+     * Match the packet action itself instead; this keeps the Scarpet event
+     * before the swap and preserves its cancellation semantics.
+     */
+    @Inject(method = "handlePlayerAction", at = @At("HEAD"), cancellable = true)
+    private void onHandSwap(ServerboundPlayerActionPacket packet, CallbackInfo ci)
     {
-        if(PLAYER_SWAPS_HANDS.onPlayerEvent(player)) ci.cancel();
+        if (packet.getAction() == ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND
+                && PLAYER_SWAPS_HANDS.onPlayerEvent(player))
+        {
+            ci.cancel();
+        }
     }
 
     @Inject(method = "handlePlayerAction", cancellable = true, at = @At(
