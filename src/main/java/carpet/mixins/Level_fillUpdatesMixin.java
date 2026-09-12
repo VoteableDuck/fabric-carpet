@@ -14,18 +14,35 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 @Mixin(Level.class)
 public abstract class Level_fillUpdatesMixin
 {
-    @ModifyConstant(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", //setBlockState main
-            constant = @Constant(intValue = 16))
-    private int addFillUpdatesInt(int original) {
-        if (CarpetSettings.impendingFillSkipUpdates.get())
-            return -1;
-        return original;
+    private static final String NEOFORGE_MARK_AND_NOTIFY = "markAndNotifyBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/chunk/LevelChunk;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/block/state/BlockState;II)V";
+
+    /*
+     * NeoForge splits the client/physics notification tail out of vanilla's
+     * Level#setBlock(BlockPos, BlockState, int, int) into markAndNotifyBlock.
+     * The UPDATE_KNOWN_SHAPE (16) check therefore lives in this method in the
+     * production-patched game, rather than in setBlock as it does in vanilla.
+     */
+    @ModifyConstant(
+            method = NEOFORGE_MARK_AND_NOTIFY,
+            constant = @Constant(intValue = 16)
+    )
+    private int addFillUpdatesInt(int original)
+    {
+        return CarpetSettings.impendingFillSkipUpdates.get() ? -1 : original;
     }
 
-    @WrapOperation(method = "setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;II)Z", at = @At( //setBlockState main
-            value = "INVOKE",
-            target  = "Lnet/minecraft/world/level/Level;updateNeighborsAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;)V"
-    ))
+    /*
+     * Same NeoForge split as above: neighbour notification is performed from
+     * markAndNotifyBlock. Wrap the patched call so other NeoForge/mod hooks can
+     * still compose with it whenever Carpet is not suppressing fill updates.
+     */
+    @WrapOperation(
+            method = NEOFORGE_MARK_AND_NOTIFY,
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/level/Level;updateNeighborsAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;)V"
+            )
+    )
     private void updateNeighborsMaybe(Level world, BlockPos blockPos, Block block, Operation<Void> original)
     {
         if (!CarpetSettings.impendingFillSkipUpdates.get())
@@ -33,5 +50,4 @@ public abstract class Level_fillUpdatesMixin
             original.call(world, blockPos, block);
         }
     }
-
 }
