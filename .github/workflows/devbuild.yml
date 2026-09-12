@@ -109,15 +109,27 @@ jobs:
               fi
 
               # Exercise the actual movableBlockEntities rule with a chest that
-              # contains an item. This catches NeoForge BlockEntity lifecycle
-              # regressions that a startup-only smoke test cannot detect.
+              # contains an item. Use a cleared deterministic test volume so
+              # terrain cannot accidentally obstruct the piston chain.
               echo 'forceload add 0 0' >&3
               echo 'carpet movableBlockEntities true' >&3
+              echo 'fill 2 99 -1 8 101 1 minecraft:air' >&3
               echo 'setblock 4 100 0 minecraft:piston[facing=east]' >&3
               echo 'setblock 5 100 0 minecraft:chest' >&3
               echo 'item replace block 5 100 0 container.0 with minecraft:diamond 3' >&3
               echo 'setblock 3 100 0 minecraft:redstone_block' >&3
               sleep 2
+
+              # Diagnostics remain in the log even when the hard assertions
+              # below fail, separating power/pushability/final-placement bugs.
+              echo 'execute if block 4 100 0 minecraft:piston[extended=true] run say CARPET_PISTON_EXTENDED' >&3
+              echo 'execute if block 5 100 0 minecraft:chest run say CARPET_CHEST_AT_SOURCE' >&3
+              echo 'execute if block 6 100 0 minecraft:chest run say CARPET_CHEST_AT_TARGET' >&3
+              echo 'execute if block 5 100 0 minecraft:moving_piston run say CARPET_MOVING_PISTON_AT_SOURCE' >&3
+              echo 'execute if block 6 100 0 minecraft:moving_piston run say CARPET_MOVING_PISTON_AT_TARGET' >&3
+              echo 'data get block 5 100 0' >&3
+              echo 'data get block 6 100 0' >&3
+
               echo 'execute if block 6 100 0 minecraft:chest run say CARPET_MOVABLE_BE_BLOCK_OK' >&3
               echo 'execute if items block 6 100 0 container.0 minecraft:diamond run say CARPET_MOVABLE_BE_DATA_OK' >&3
 
