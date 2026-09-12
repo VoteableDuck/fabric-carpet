@@ -53,6 +53,92 @@ processResources {
 
 def intermediaryNamePattern = ~/\b(?:class|method|field)_\d+\b/
 
+def stripJavaComments = { String source ->
+    def out = new StringBuilder(source.length())
+    boolean inLineComment = false
+    boolean inBlockComment = false
+    boolean inString = false
+    boolean inChar = false
+    boolean escaped = false
+
+    for (int i = 0; i < source.length(); i++) {
+        def current = source.charAt(i)
+        def next = i + 1 < source.length() ? source.charAt(i + 1) : null
+
+        if (inLineComment) {
+            if (current == '\n') {
+                inLineComment = false
+                out.append(current)
+            } else {
+                out.append(' ')
+            }
+            continue
+        }
+
+        if (inBlockComment) {
+            if (current == '*' && next == '/') {
+                out.append(' ')
+                out.append(' ')
+                i++
+                inBlockComment = false
+            } else if (current == '\n') {
+                out.append(current)
+            } else {
+                out.append(' ')
+            }
+            continue
+        }
+
+        if (inString) {
+            out.append(current)
+            if (escaped) {
+                escaped = false
+            } else if (current == '\\') {
+                escaped = true
+            } else if (current == '"') {
+                inString = false
+            }
+            continue
+        }
+
+        if (inChar) {
+            out.append(current)
+            if (escaped) {
+                escaped = false
+            } else if (current == '\\') {
+                escaped = true
+            } else if (current == '\'') {
+                inChar = false
+            }
+            continue
+        }
+
+        if (current == '/' && next == '/') {
+            out.append(' ')
+            out.append(' ')
+            i++
+            inLineComment = true
+            continue
+        }
+        if (current == '/' && next == '*') {
+            out.append(' ')
+            out.append(' ')
+            i++
+            inBlockComment = true
+            continue
+        }
+
+        out.append(current)
+        if (current == '"') {
+            inString = true
+        } else if (current == '\'') {
+            inChar = true
+        }
+    }
+
+    out.toString()
+}
+
 tasks.register('checkForIntermediaryNames') {
     group = 'verification'
     description = 'Rejects Yarn intermediary names that are invalid in production Mojang mappings.'
@@ -63,10 +149,11 @@ tasks.register('checkForIntermediaryNames') {
     doLast {
         def offenders = []
         inputs.files.files.sort { it.path }.each { file ->
-            file.eachLine('UTF-8') { line, lineNumber ->
+            def uncommentedSource = stripJavaComments(file.getText('UTF-8'))
+            uncommentedSource.readLines().eachWithIndex { line, index ->
                 def matcher = line =~ intermediaryNamePattern
                 if (matcher.find()) {
-                    offenders << "${project.relativePath(file)}:${lineNumber}: ${matcher.group()}"
+                    offenders << "${project.relativePath(file)}:${index + 1}: ${matcher.group()}"
                 }
             }
         }

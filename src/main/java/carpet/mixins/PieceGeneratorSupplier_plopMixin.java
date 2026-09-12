@@ -1,22 +1,19 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import net.minecraft.world.level.levelgen.structure.pieces.PieceGeneratorSupplier;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 import java.util.function.Predicate;
-import net.minecraft.world.level.levelgen.structure.pieces.PieceGeneratorSupplier;
 
 @Mixin(PieceGeneratorSupplier.class)
 public interface PieceGeneratorSupplier_plopMixin
 {
-    @Redirect(method = "method_39845", at = @At(
-            value = "INVOKE",
-            target = "java/util/function/Predicate.test(Ljava/lang/Object;)Z"
-    ), remap = false)
-    private static boolean checkMate(Predicate<Object> predicate, Object o)
+    @ModifyVariable(method = "simple", at = @At("HEAD"), argsOnly = true)
+    private static Predicate<Object> carpet$skipGenerationChecks(Predicate<Object> predicate)
     {
-        return CarpetSettings.skipGenerationChecks.get() || predicate.test(o);
+        return context -> CarpetSettings.skipGenerationChecks.get() || predicate.test(context);
     }
 }
