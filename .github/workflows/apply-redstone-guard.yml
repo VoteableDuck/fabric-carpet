@@ -1,0 +1,41 @@
+name: Apply Redstone Turbo Guard
+
+on:
+  push:
+    branches: [1.21.11]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 1.21.11
+      - name: Apply exact NeoForge compatibility guard
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main/java/carpet/helpers/RedstoneWireTurbo.java')
+          text = path.read_text(encoding='utf-8')
+          old = '''        UpdateNode center_up = upd.neighbor_nodes[1];
+          boolean center_up_is_cube = center_up.currentState.isRedstoneConductor(worldIn, center_up.self);'''
+          new = '''        UpdateNode center_up = upd.neighbor_nodes[1];
+          if (center_up == null) return state;
+          boolean center_up_is_cube = center_up.currentState.isRedstoneConductor(worldIn, center_up.self);'''
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected exactly one guard target, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+      - name: Commit source patch and remove one-shot workflow
+        run: |
+          rm .github/workflows/apply-redstone-guard.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/main/java/carpet/helpers/RedstoneWireTurbo.java .github/workflows/apply-redstone-guard.yml
+          git commit -m 'Guard sparse redstone turbo neighbors on NeoForge'
+          git push origin HEAD:1.21.11
