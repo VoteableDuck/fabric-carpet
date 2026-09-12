@@ -50,7 +50,7 @@ jobs:
           test -n "$(find artifact -maxdepth 1 -type f -name '*.jar' -print -quit)"
           ls -lh artifact
 
-      - name: Production server JAR and fake-player smoke test
+      - name: Production server JAR, fake-player, and Scarpet smoke test
         shell: bash
         run: |
           set -euo pipefail
@@ -75,6 +75,7 @@ jobs:
             ready=0
             fake_spawned=0
             fake_removed=0
+            scarpet_ok=0
 
             for _ in $(seq 1 180); do
               if grep -Eq 'Done \([0-9.]+s\)!|Done \(' production-server.log logs/latest.log 2>/dev/null; then
@@ -89,8 +90,23 @@ jobs:
 
             if [ "$ready" -eq 1 ]; then
               echo 'Production NeoForge server reached ready state.'
-              echo 'player CarpetSmoke spawn' >&3
 
+              echo 'script run 424200+42' >&3
+              for _ in $(seq 1 30); do
+                if grep -Eq '= +424242([[:space:](]|$)' production-server.log logs/latest.log 2>/dev/null; then
+                  scarpet_ok=1
+                  break
+                fi
+                if ! kill -0 "$server_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 1
+              done
+              if [ "$scarpet_ok" -eq 1 ]; then
+                echo 'Production Scarpet expression executed successfully.'
+              fi
+
+              echo 'player CarpetSmoke spawn' >&3
               for _ in $(seq 1 30); do
                 if grep -Eq 'CarpetSmoke.*logged in with entity id|CarpetSmoke joined the game' production-server.log logs/latest.log 2>/dev/null; then
                   fake_spawned=1
@@ -150,6 +166,7 @@ jobs:
             fi
 
             test "$ready" -eq 1
+            test "$scarpet_ok" -eq 1
             test "$fake_spawned" -eq 1
             test "$fake_removed" -eq 1
           )
