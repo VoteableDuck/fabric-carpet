@@ -52,6 +52,7 @@ processResources {
 }
 
 def intermediaryNamePattern = ~/\b(?:class|method|field)_\d+\b/
+def fabricNamespacePattern = ~/\bnet\.fabricmc(?:\.|\b)/
 
 def stripJavaComments = { String source ->
     def out = new StringBuilder(source.length())
@@ -198,13 +199,33 @@ publishing {
 
 tasks.register('checkNoBundledFabricNamespaces') {
     group = 'verification'
-    description = 'Fails if the NeoForge port owns or packages classes in Fabric API/Loader namespaces.'
+    description = 'Fails if the NeoForge port owns, references, or packages classes in Fabric API/Loader namespaces.'
     dependsOn tasks.named('jar')
+    inputs.files(fileTree('src/main/java') {
+        include '**/*.java'
+    })
 
     doLast {
         def sourceNamespace = file('src/main/java/net/fabricmc')
         if (sourceNamespace.exists()) {
             throw new GradleException('NeoForge Carpet must not own net.fabricmc classes: ' + sourceNamespace)
+        }
+
+        def sourceReferences = []
+        inputs.files.files.sort { it.path }.each { file ->
+            def uncommentedSource = stripJavaComments(file.getText('UTF-8'))
+            uncommentedSource.readLines().eachWithIndex { line, index ->
+                def matcher = line =~ fabricNamespacePattern
+                if (matcher.find()) {
+                    sourceReferences << "${project.relativePath(file)}:${index + 1}: ${matcher.group()}"
+                }
+            }
+        }
+        if (!sourceReferences.isEmpty()) {
+            throw new GradleException(
+                    'NeoForge Carpet Java sources must not reference Fabric API/Loader namespaces:\n' +
+                            sourceReferences.join('\n')
+            )
         }
 
         def jarFile = tasks.named('jar').get().archiveFile.get().asFile
