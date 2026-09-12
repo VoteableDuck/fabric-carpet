@@ -198,14 +198,25 @@ publishing {
 
 tasks.register('checkNoBundledFabricNamespaces') {
     group = 'verification'
-    description = 'Fails if the NeoForge port ships compatibility classes in Fabric API/Loader namespaces.'
+    description = 'Fails if the NeoForge port owns or packages classes in Fabric API/Loader namespaces.'
+    dependsOn tasks.named('jar')
+
     doLast {
-        def forbidden = [
-                file('src/main/java/net/fabricmc/api'),
-                file('src/main/java/net/fabricmc/loader')
-        ].findAll { it.exists() }
-        if (!forbidden.isEmpty()) {
-            throw new GradleException('NeoForge Carpet must not bundle net.fabricmc API/Loader classes: ' + forbidden)
+        def sourceNamespace = file('src/main/java/net/fabricmc')
+        if (sourceNamespace.exists()) {
+            throw new GradleException('NeoForge Carpet must not own net.fabricmc classes: ' + sourceNamespace)
+        }
+
+        def jarFile = tasks.named('jar').get().archiveFile.get().asFile
+        def bundledEntries = zipTree(jarFile).matching {
+            include 'net/fabricmc/**'
+        }.files
+
+        if (!bundledEntries.isEmpty()) {
+            def entries = bundledEntries.collect { it.name }.sort().join(', ')
+            throw new GradleException(
+                    "NeoForge Carpet JAR must not bundle net.fabricmc classes/resources (Fabric Loader ABI collision risk): ${entries}"
+            )
         }
     }
 }
