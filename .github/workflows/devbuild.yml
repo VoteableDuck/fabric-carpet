@@ -50,7 +50,7 @@ jobs:
           test -n "$(find artifact -maxdepth 1 -type f -name '*.jar' -print -quit)"
           ls -lh artifact
 
-      - name: Production server JAR smoke test
+      - name: Production server JAR and fake-player smoke test
         shell: bash
         run: |
           set -euo pipefail
@@ -65,11 +65,16 @@ jobs:
             cd "$PROD_DIR"
             java -jar neoforge-installer.jar --installServer
             echo 'eula=true' > eula.txt
+            printf 'online-mode=false\nspawn-protection=0\n' > server.properties
             cp "$GITHUB_WORKSPACE"/artifact/*.jar mods/
 
-            setsid ./run.sh nogui > production-server.log 2>&1 &
+            mkfifo server.stdin
+            exec 3<>server.stdin
+            setsid ./run.sh nogui < server.stdin > production-server.log 2>&1 &
             server_pid=$!
             ready=0
+            fake_spawned=0
+            fake_removed=0
 
             for _ in $(seq 1 180); do
               if grep -Eq 'Done \([0-9.]+s\)!|Done \(' production-server.log logs/latest.log 2>/dev/null; then
@@ -84,21 +89,59 @@ jobs:
 
             if [ "$ready" -eq 1 ]; then
               echo 'Production NeoForge server reached ready state.'
+              echo 'player CarpetSmoke spawn' >&3
+
+              for _ in $(seq 1 30); do
+                if grep -Eq 'CarpetSmoke.*logged in with entity id|CarpetSmoke joined the game' production-server.log logs/latest.log 2>/dev/null; then
+                  fake_spawned=1
+                  break
+                fi
+                if ! kill -0 "$server_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 1
+              done
+
+              if [ "$fake_spawned" -eq 1 ]; then
+                echo 'Production fake player logged in successfully.'
+                echo 'player CarpetSmoke jump' >&3
+                sleep 1
+
+                if ! kill -0 "$server_pid" 2>/dev/null; then
+                  echo 'Production server exited while ticking the fake player.' >&2
+                else
+                  echo 'player CarpetSmoke kill' >&3
+                  for _ in $(seq 1 30); do
+                    if grep -Eq 'CarpetSmoke left the game|CarpetSmoke lost connection' production-server.log logs/latest.log 2>/dev/null; then
+                      fake_removed=1
+                      break
+                    fi
+                    if ! kill -0 "$server_pid" 2>/dev/null; then
+                      break
+                    fi
+                    sleep 1
+                  done
+                fi
+              fi
+
+              if kill -0 "$server_pid" 2>/dev/null; then
+                echo 'stop' >&3
+                for _ in $(seq 1 30); do
+                  if ! kill -0 "$server_pid" 2>/dev/null; then
+                    break
+                  fi
+                  sleep 1
+                done
+              fi
+            fi
+
+            if kill -0 "$server_pid" 2>/dev/null; then
               kill -TERM -- "-$server_pid" 2>/dev/null || true
               sleep 2
               kill -KILL -- "-$server_pid" 2>/dev/null || true
-              wait "$server_pid" 2>/dev/null || true
-            else
-              if kill -0 "$server_pid" 2>/dev/null; then
-                echo 'Production server stayed alive for 180 seconds but did not expose the expected ready marker.' >&2
-                kill -TERM -- "-$server_pid" 2>/dev/null || true
-                sleep 2
-                kill -KILL -- "-$server_pid" 2>/dev/null || true
-              else
-                wait "$server_pid" 2>/dev/null || true
-                echo 'Production server exited before ready state.' >&2
-              fi
             fi
+            wait "$server_pid" 2>/dev/null || true
+            exec 3>&-
 
             cat production-server.log
             if [ -f logs/latest.log ]; then
@@ -107,6 +150,8 @@ jobs:
             fi
 
             test "$ready" -eq 1
+            test "$fake_spawned" -eq 1
+            test "$fake_removed" -eq 1
           )
 
       - name: Install Xvfb
@@ -149,15 +194,46 @@ jobs:
       - name: Development client startup smoke test
         shell: bash
         run: |
-          set +e
-          timeout 180s xvfb-run -a ./gradlew --no-daemon runClient --stacktrace
-          status=$?
-          set -e
-          if [ "$status" -eq 124 ]; then
-            echo "Minecraft development client remained alive for 180 seconds; treating startup smoke test as passed."
-            exit 0
+          set -euo pipefail
+          rm -f development-client.log
+          setsid xvfb-run -a ./gradlew --no-daemon runClient --stacktrace > development-client.log 2>&1 &
+          client_pid=$!
+          ready=0
+
+          for _ in $(seq 1 180); do
+            if grep -Eq 'Sound engine started|OpenAL initialized|Created: .*minecraft:textures/atlas/blocks.png-atlas' development-client.log run/logs/latest.log 2>/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$client_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" -eq 1 ]; then
+            echo 'Minecraft development client reached renderer/audio ready state.'
+          elif kill -0 "$client_pid" 2>/dev/null; then
+            echo 'Minecraft development client stayed alive for 180 seconds; accepting smoke test.'
+            ready=1
+          else
+            echo 'Minecraft development client exited before reaching ready state.' >&2
           fi
-          exit "$status"
+
+          if kill -0 "$client_pid" 2>/dev/null; then
+            kill -TERM -- "-$client_pid" 2>/dev/null || true
+            sleep 2
+            kill -KILL -- "-$client_pid" 2>/dev/null || true
+          fi
+          wait "$client_pid" 2>/dev/null || true
+
+          cat development-client.log
+          if [ -f run/logs/latest.log ]; then
+            echo '===== development client logs/latest.log ====='
+            cat run/logs/latest.log
+          fi
+
+          test "$ready" -eq 1
 
       - name: Upload JAR
         uses: actions/upload-artifact@v4
