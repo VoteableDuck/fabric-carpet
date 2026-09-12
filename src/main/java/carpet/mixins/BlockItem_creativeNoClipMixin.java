@@ -1,6 +1,8 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
@@ -11,26 +13,26 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(BlockItem.class)
 public class BlockItem_creativeNoClipMixin
 {
-    @Redirect(method = "canPlace", at = @At(
+    @WrapOperation(method = "canPlace", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/Level;isUnobstructed(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/phys/shapes/CollisionContext;)Z"
     ))
     private boolean canSpectatingPlace(Level world, BlockState state, BlockPos pos, CollisionContext context,
-                                       BlockPlaceContext contextOuter, BlockState stateOuter)
+                                       Operation<Boolean> original, BlockPlaceContext contextOuter, BlockState stateOuter)
     {
         Player player = contextOuter.getPlayer();
         if (CarpetSettings.creativeNoClip && player != null && player.isCreative() && player.getAbilities().flying)
         {
-            // copy from canPlace
+            // copy from canPlace, intentionally replacing the wrapped obstruction
+            // check only for creative flying players using this Carpet rule.
             VoxelShape voxelShape = state.getCollisionShape(world, pos, context);
             return voxelShape.isEmpty() || world.isUnobstructed(player, voxelShape.move(pos.getX(), pos.getY(), pos.getZ()));
 
         }
-        return world.isUnobstructed(state, pos, context);
+        return original.call(world, state, pos, context);
     }
 }
