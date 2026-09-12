@@ -1,0 +1,31 @@
+license="MIT"
+issueTrackerURL="https://github.com/gnembon/fabric-carpet/issues"
+
+[[mods]]
+modId="carpet"
+version="${version}"
+displayName="Carpet Mod"
+displayURL="https://github.com/gnembon/fabric-carpet"
+logoFile="assets/carpet/icon.png"
+authors="gnembon, Carpet contributors"
+description='''
+Carpet Mod ported to NeoForge for Minecraft 1.21.11.
+Provides Carpet rules, Scarpet, profiling/debugging tools, and Carpet fake players.
+'''
+
+[[mixins]]
+config="carpet.mixins.json"
+
+[[dependencies.carpet]]
+modId="neoforge"
+type="required"
+versionRange="[${neo_version},)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.carpet]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.11]"
+ordering="NONE"
+side="BOTH"
