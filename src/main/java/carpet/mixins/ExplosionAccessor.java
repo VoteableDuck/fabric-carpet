@@ -2,29 +2,31 @@ package carpet.mixins;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ServerExplosion;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-import net.minecraft.world.entity.Entity;
-
+/**
+ * Carpet-owned accessors use a namespace prefix so they cannot collide with
+ * accessors injected by other NeoForge mods into ServerExplosion.
+ */
 @Mixin(ServerExplosion.class)
-public interface ExplosionAccessor {
+public interface ExplosionAccessor
+{
+    @Accessor("level")
+    ServerLevel carpet$getLevel();
 
-    @Accessor
-    ServerLevel getLevel();
+    @Accessor("center")
+    Vec3 carpet$getCenter();
 
-    @Accessor
-    Vec3 getCenter();
+    @Accessor("radius")
+    float carpet$getRadius();
 
-    @Accessor
-    float getRadius();
+    @Accessor("source")
+    Entity carpet$getSource();
 
-    @Accessor
-    Entity getSource();
-
-    @Accessor
-    DamageSource getDamageSource();
-
+    @Accessor("damageSource")
+    DamageSource carpet$getDamageSource();
 }
