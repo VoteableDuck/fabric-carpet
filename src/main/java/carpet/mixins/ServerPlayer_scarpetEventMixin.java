@@ -46,7 +46,7 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/player/Player;completeUsingItem()V"
     ))
-    private void finishedUsingItem(Player playerEntity, Operation<Void> original)
+    private void finishedUsingItem(ServerPlayer playerEntity, Operation<Void> original)
     {
         if (PLAYER_FINISHED_USING_ITEM.isNeeded())
         {
