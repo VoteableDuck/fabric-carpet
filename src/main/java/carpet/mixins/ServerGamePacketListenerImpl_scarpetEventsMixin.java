@@ -1,12 +1,13 @@
 package carpet.mixins;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.item.crafting.RecipeManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_CLICKS_BLOCK;
@@ -146,22 +147,22 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
             }
     }
 
-    @Redirect(method = "handlePlayerAction", at = @At(
+    @WrapOperation(method = "handlePlayerAction", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerPlayer;releaseUsingItem()V"
     ))
-    private void onStopUsing(ServerPlayer serverPlayerEntity)
+    private void onStopUsing(ServerPlayer serverPlayerEntity, Operation<Void> original)
     {
         if (PLAYER_RELEASED_ITEM.isNeeded())
         {
             InteractionHand hand = serverPlayerEntity.getUsedItemHand();
             ItemStack stack = serverPlayerEntity.getUseItem().copy();
-            serverPlayerEntity.releaseUsingItem();
+            original.call(serverPlayerEntity);
             PLAYER_RELEASED_ITEM.onItemAction(player, hand, stack);
         }
         else
         {
-            serverPlayerEntity.releaseUsingItem();
+            original.call(serverPlayerEntity);
         }
     }
 
