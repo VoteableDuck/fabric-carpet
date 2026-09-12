@@ -1,10 +1,17 @@
 package net.fabricmc.loader.api;
 
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import net.fabricmc.api.EnvType;
 import net.neoforged.api.distmarker.Dist;
@@ -19,6 +26,13 @@ import net.neoforged.fml.loading.FMLPaths;
  */
 public final class FabricLoader {
     private static final FabricLoader INSTANCE = new FabricLoader();
+    private static final String CARPET_MOD_ID = "carpet";
+    private static final String MINECRAFT_MOD_ID = "minecraft";
+    private static final String MINECRAFT_VERSION = "1.21.11";
+    private static final String CARPET_BASE_VERSION = "1.4.194";
+    private static final Pattern MOD_VERSION_LINE = Pattern.compile("(?m)^\\s*version\\s*=\\s*\"([^\"]+)\"\\s*$");
+
+    private volatile String earlyCarpetVersion;
 
     private FabricLoader() {
     }
@@ -28,18 +42,85 @@ public final class FabricLoader {
     }
 
     public Optional<ModContainer> getModContainer(String modId) {
-        ModList list = ModList.get();
-        if (list == null) return Optional.empty();
-        return list.getMods().stream()
-                .filter(info -> info.getModId().equals(modId))
-                .findFirst()
-                .map(ModContainer::new);
+        // During client bootstrap Minecraft validates commands before NeoForge has
+        // necessarily populated ModList. CarpetSettings is pulled in from those
+        // command mixins, so Fabric Carpet's eager metadata lookups must not depend
+        // on NeoForge mod construction having completed already.
+        try {
+            ModList list = ModList.get();
+            if (list != null) {
+                Optional<ModContainer> loaded = list.getMods().stream()
+                        .filter(info -> info.getModId().equals(modId))
+                        .findFirst()
+                        .map(ModContainer::new);
+                if (loaded.isPresent()) return loaded;
+            }
+        } catch (IllegalStateException ignored) {
+            // FML may reject ModList access during very early bootstrap. Fall
+            // through to the metadata that is safe to resolve at this stage.
+        }
+
+        return getEarlyBootstrapContainer(modId);
+    }
+
+    private Optional<ModContainer> getEarlyBootstrapContainer(String modId) {
+        if (MINECRAFT_MOD_ID.equals(modId)) {
+            return Optional.of(new ModContainer(MINECRAFT_MOD_ID, MINECRAFT_VERSION));
+        }
+        if (CARPET_MOD_ID.equals(modId)) {
+            return Optional.of(new ModContainer(CARPET_MOD_ID, getEarlyCarpetVersion()));
+        }
+        return Optional.empty();
+    }
+
+    private String getEarlyCarpetVersion() {
+        String cached = earlyCarpetVersion;
+        if (cached != null) return cached;
+
+        String resolved = readCarpetVersionFromMetadata().orElse(CARPET_BASE_VERSION);
+        earlyCarpetVersion = resolved;
+        return resolved;
+    }
+
+    /**
+     * processResources expands ${version} in neoforge.mods.toml for both the
+     * development run directory and the distributable JAR. Reading that resource
+     * gives early bootstrap the exact same Carpet build version that FML will
+     * expose later, without depending on ModList initialization order.
+     */
+    private static Optional<String> readCarpetVersionFromMetadata() {
+        ClassLoader loader = FabricLoader.class.getClassLoader();
+        try (InputStream input = loader.getResourceAsStream("META-INF/neoforge.mods.toml")) {
+            if (input == null) return Optional.empty();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                StringBuilder toml = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    toml.append(line).append('\n');
+                }
+                Matcher matcher = MOD_VERSION_LINE.matcher(toml);
+                if (matcher.find()) {
+                    String version = matcher.group(1).trim();
+                    if (!version.isEmpty() && !version.contains("${")) {
+                        return Optional.of(version);
+                    }
+                }
+            }
+        } catch (IOException ignored) {
+            // The compatibility facade must remain safe during crash/bootstrap
+            // reporting. Falling back to Carpet's base version is preferable to
+            // turning an unavailable metadata resource into a bootstrap failure.
+        }
+        return Optional.empty();
     }
 
     public Collection<ModContainer> getAllMods() {
-        ModList list = ModList.get();
-        if (list == null) return List.of();
-        return list.getMods().stream().map(ModContainer::new).toList();
+        try {
+            ModList list = ModList.get();
+            if (list != null) return list.getMods().stream().map(ModContainer::new).toList();
+        } catch (IllegalStateException ignored) {
+        }
+        return List.of();
     }
 
     public EnvType getEnvironmentType() {
