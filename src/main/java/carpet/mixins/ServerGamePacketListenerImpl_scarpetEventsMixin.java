@@ -1,6 +1,5 @@
 package carpet.mixins;
 
-import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 import net.minecraft.world.entity.player.Input;
 import net.minecraft.world.item.crafting.RecipeManager;
 import org.spongepowered.asm.mixin.Mixin;
@@ -52,8 +51,6 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
 {
     @Shadow public ServerPlayer player;
 
-
-
     @Inject(method = "handlePlayerInput", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerPlayer;setLastClientInput(Lnet/minecraft/world/entity/player/Input;)V"
@@ -61,7 +58,7 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     private void checkMovement(ServerboundPlayerInputPacket packet, CallbackInfo ci)
     {
         Input input = packet.input();
-        
+
         // sneak events
         boolean wasDown = player.isShiftKeyDown();
         boolean isDown = input.shift();
@@ -120,7 +117,6 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
             ci.cancel();
         }
     }
-
 
     @Inject(method = "handleMovePlayer", at = @At(
             value = "INVOKE",
@@ -280,13 +276,19 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
         }
     }
 
-    @Inject(method = "method_44356", // lambda of handleChatCommand(ServerboundChatCommandPacket)
-            at = @At(value = "HEAD")
-    )
-    private void onChatCommandMessage(ServerboundChatCommandPacket serverboundChatCommandPacket, CallbackInfo ci) {
+    /**
+     * Fabric Carpet targeted the synthetic/intermediary method_44356 here.
+     * In Mojmap/NeoForge 1.21.11 the unsigned command execution path is the
+     * stable private performUnsignedChatCommand(String) method. Hooking it
+     * keeps the event on the server execution path without relying on a
+     * loader-specific synthetic name.
+     */
+    @Inject(method = "performUnsignedChatCommand", at = @At("HEAD"))
+    private void onChatCommandMessage(String command, CallbackInfo ci)
+    {
         if (PLAYER_COMMAND.isNeeded())
         {
-            PLAYER_COMMAND.onPlayerMessage(player, serverboundChatCommandPacket.command());
+            PLAYER_COMMAND.onPlayerMessage(player, command);
         }
     }
 }
