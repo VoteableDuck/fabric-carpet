@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import carpet.helpers.HopperCounter;
 import carpet.utils.WoolTool;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.Container;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -49,14 +48,17 @@ public abstract class HopperBlockEntity_counterMixin extends RandomizableContain
                     blockPos.relative(hopperFacing));
             if (woolColor != null)
             {
-                Container inventory = HopperBlockEntity.getContainerAt(world, blockPos);
-                for (int i = 0; i < inventory.getContainerSize(); ++i)
+                // The counter drains this hopper itself. NeoForge's getContainerAt is
+                // deprecated in favor of capability-aware external lookups, but no
+                // external lookup is needed here because the hopper instance is
+                // already provided by ejectItems.
+                for (int i = 0; i < hopperBlockEntity.getContainerSize(); ++i)
                 {
-                    if (!inventory.getItem(i).isEmpty())
+                    if (!hopperBlockEntity.getItem(i).isEmpty())
                     {
-                        ItemStack itemstack = inventory.getItem(i);//.copy();
+                        ItemStack itemstack = hopperBlockEntity.getItem(i);//.copy();
                         HopperCounter.getCounter(woolColor).add(world.getServer(), itemstack);
-                        inventory.setItem(i, ItemStack.EMPTY);
+                        hopperBlockEntity.setItem(i, ItemStack.EMPTY);
                     }
                 }
                 cir.setReturnValue(true);
