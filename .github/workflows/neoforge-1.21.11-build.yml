@@ -1,6 +1,11 @@
-name: Manual NeoForge 1.21.11 JAR Build
+name: NeoForge 1.21.11 JAR Build
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/neoforge-1.21.11-build.yml'
   workflow_dispatch:
     inputs:
       ref:
@@ -22,7 +27,7 @@ jobs:
       - name: Checkout requested ref
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || '1.21.11' }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
@@ -37,7 +42,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build
-        run: ./gradlew --no-daemon clean build
+        run: ./gradlew --no-daemon clean build --stacktrace
 
       - name: Collect distributable JAR
         shell: bash
