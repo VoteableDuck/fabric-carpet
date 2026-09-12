@@ -192,6 +192,16 @@ jobs:
             cd "$PROD_CLIENT_DIR"
             java -jar neoforge-installer.jar --install-client "$PROD_CLIENT_DIR"
           )
+
+          # Quick Play only runs after Minecraft's first-launch UI gates. CI has
+          # no user to acknowledge those screens, so mark the disposable test
+          # profile as already onboarded before either production client launch.
+          printf '%s\n' \
+            'onboardAccessibility:false' \
+            'skipMultiplayerWarning:true' \
+            'joinedFirstServer:true' \
+            > "$PROD_CLIENT_DIR/options.txt"
+
           cp artifact/*.jar "$PROD_CLIENT_DIR/mods/"
 
       - name: Prepare client assets
