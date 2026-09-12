@@ -56,9 +56,9 @@ public class PistonStructureResolver_customStickyMixin
         return original.call(state, behindState);
     }
 
-    // NeoForge checks sticking from both states. Carpet's custom hook already
-    // decides the directional relationship, so do not let the mirror check
-    // override that decision.
+    // NeoForge checks sticking from both states. Carpet's directional hook is
+    // authoritative only when the first state was a Carpet custom-sticky block;
+    // otherwise preserve NeoForge's second canStickTo check for other mods.
     @WrapOperation(
             method = "addBlockLine",
             at = @At(
@@ -70,7 +70,11 @@ public class PistonStructureResolver_customStickyMixin
     private boolean carpet$allowMirrorBlockLineCheck(
             BlockState state, BlockState behindState, Operation<Boolean> original)
     {
-        return true;
+        if (behindState.getBlock() instanceof BlockPistonBehaviourInterface)
+        {
+            return true;
+        }
+        return original.call(state, behindState);
     }
 
     @WrapOperation(
@@ -108,8 +112,12 @@ public class PistonStructureResolver_customStickyMixin
             )
     )
     private boolean carpet$allowMirrorBranchCheck(
-            BlockState neighborState, BlockState state, Operation<Boolean> original)
+            BlockState state, BlockState neighborState, Operation<Boolean> original)
     {
-        return true;
+        if (state.getBlock() instanceof BlockPistonBehaviourInterface)
+        {
+            return true;
+        }
+        return original.call(state, neighborState);
     }
 }
