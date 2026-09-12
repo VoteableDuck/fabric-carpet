@@ -112,7 +112,7 @@ public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements W
             this.level.getChunkSource().onSectionEmptinessChanged(chunkPos.x, SectionPos.blockToSectionCoord(y), chunkPos.z, hasOnlyAir);
         }
 
-        if (LightEngine.hasDifferentLightProperties(oldBlockState, newBlockState)) {
+        if (LightEngine.hasDifferentLightProperties(this, blockPos_1, oldBlockState, newBlockState)) {
             ProfilerFiller profiler = Profiler.get();
             profiler.push("updateSkyLightSources");
             if (skyLightSources != null) // compat with ScalableLux aka Starlight port
@@ -157,7 +157,7 @@ public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements W
             return null;
         }
 
-        if (!level.isClientSide() && sideEffects) {
+        if (!level.isClientSide() && !level.captureBlockSnapshots && sideEffects) {
             // this updates stuff, schedule ticks - do we want that since its only be called from MovingPistonBlock really?
             newBlockState.onPlace(level, blockPos_1, oldBlockState, movedByPiston);
         }

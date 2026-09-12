@@ -1,105 +1,68 @@
 package carpet.mixins;
 
-import carpet.fakes.WorldChunkInterface;
 import carpet.fakes.LevelInterface;
+import carpet.fakes.WorldChunkInterface;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.FullChunkStatus;
-import net.minecraft.util.profiling.Profiler;
-import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EntityBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.LidBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
-import org.spongepowered.asm.mixin.Final;
+import net.neoforged.neoforge.common.util.BlockSnapshot;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 
 @Mixin(Level.class)
 public abstract class Level_movableBEMixin implements LevelInterface, LevelAccessor
 {
-    @Shadow
-    @Final
-    public boolean isClientSide;
-
-    @Shadow
-    public abstract LevelChunk getChunkAt(BlockPos blockPos_1);
-    
-    @Shadow
-    public abstract void setBlocksDirty(BlockPos blockPos_1, BlockState s1, BlockState s2);
-    
-    @Shadow
-    public abstract void sendBlockUpdated(BlockPos var1, BlockState var2, BlockState var3, int var4);
-
-    @Shadow public abstract void updateNeighbourForOutputSignal(BlockPos pos, Block block);
-
-    @Shadow public abstract boolean isDebug();
-
-    @Shadow public abstract void updatePOIOnBlockStateChange(final BlockPos blockPos, final BlockState blockState, final BlockState blockState2);
-
     /**
      * @author 2No2Name
      */
     @Override
-    public boolean setBlockStateWithBlockEntity(BlockPos blockPos_1, BlockState blockState_1, BlockEntity newBlockEntity, int int_1)
+    public boolean setBlockStateWithBlockEntity(BlockPos blockPos, BlockState newState, BlockEntity newBlockEntity, int flags)
     {
-        if (isOutsideBuildHeight(blockPos_1) || !this.isClientSide && isDebug()) return false;
-        LevelChunk worldChunk_1 = this.getChunkAt(blockPos_1);
-        Block block_1 = blockState_1.getBlock();
-
-        BlockState blockState_2;
-        if (newBlockEntity != null && block_1 instanceof EntityBlock)
-        {
-            blockState_2 = ((WorldChunkInterface) worldChunk_1).setBlockStateWithBlockEntity(blockPos_1, blockState_1, newBlockEntity, int_1);
-            if (newBlockEntity instanceof LidBlockEntity)
-            {
-                scheduleTick(blockPos_1, block_1, 5);
-            }
-        }
-        else
-        {
-            blockState_2 = worldChunk_1.setBlockState(blockPos_1, blockState_1, int_1);
-        }
-
-        if (blockState_2 == null)
+        Level level = (Level) (Object) this;
+        if (!level.isInValidBounds(blockPos) || !level.isClientSide() && level.isDebug())
         {
             return false;
         }
 
-        BlockState blockState_3 = this.getBlockState(blockPos_1);
-
-        if (blockState_3 == blockState_1)
+        blockPos = blockPos.immutable();
+        LevelChunk chunk = level.getChunkAt(blockPos);
+        BlockSnapshot blockSnapshot = null;
+        if (level.captureBlockSnapshots && !level.isClientSide())
         {
-            if (blockState_2 != blockState_3)
-            {
-                this.setBlocksDirty(blockPos_1, blockState_2, blockState_3);
-            }
+            blockSnapshot = BlockSnapshot.create(level.dimension(), level, blockPos, flags);
+            level.capturedBlockSnapshots.add(blockSnapshot);
+        }
 
-            if ((int_1 & 2) != 0 && (!this.isClientSide || (int_1 & 4) == 0) && (this.isClientSide || worldChunk_1.getFullStatus() != null && worldChunk_1.getFullStatus().isOrAfter(FullChunkStatus.BLOCK_TICKING)))
+        BlockState oldState;
+        if (newBlockEntity != null && newState.getBlock() instanceof EntityBlock)
+        {
+            oldState = ((WorldChunkInterface) chunk).setBlockStateWithBlockEntity(blockPos, newState, newBlockEntity, flags);
+            if (newBlockEntity instanceof LidBlockEntity)
             {
-                this.sendBlockUpdated(blockPos_1, blockState_2, blockState_1, int_1);
+                level.scheduleTick(blockPos, newState.getBlock(), 5);
             }
+        }
+        else
+        {
+            oldState = chunk.setBlockState(blockPos, newState, flags);
+        }
 
-            if (!this.isClientSide && (int_1 & 1) != 0)
+        if (oldState == null)
+        {
+            if (blockSnapshot != null)
             {
-                this.updateNeighborsAt(blockPos_1, blockState_2.getBlock());
-                if (blockState_1.hasAnalogOutputSignal())
-                {
-                    updateNeighbourForOutputSignal(blockPos_1, block_1);
-                }
+                level.capturedBlockSnapshots.remove(blockSnapshot);
             }
+            return false;
+        }
 
-            if ((int_1 & 16) == 0)
-            {
-                int int_2 = int_1 & -34;
-                blockState_2.updateIndirectNeighbourShapes(this, blockPos_1, int_2); // prepare
-                blockState_1.updateNeighbourShapes(this, blockPos_1, int_2); // updateNeighbours
-                blockState_1.updateIndirectNeighbourShapes(this, blockPos_1, int_2); // prepare
-            }
-            updatePOIOnBlockStateChange(blockPos_1, blockState_2, blockState_3);
+        if (blockSnapshot == null)
+        {
+            level.markAndNotifyBlock(blockPos, chunk, oldState, newState, flags, 512);
         }
         return true;
     }

@@ -4,6 +4,8 @@ import carpet.CarpetSettings;
 import carpet.fakes.BlockEntityInterface;
 import carpet.fakes.PistonBlockEntityInterface;
 import carpet.fakes.LevelInterface;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -23,7 +25,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PistonMovingBlockEntity.class)
@@ -93,24 +94,25 @@ public abstract class PistonMovingBlockEntity_movableBEMixin extends BlockEntity
     /**
      * @author 2No2Name
      */
-    @Redirect(method = "tick", at = @At(value = "INVOKE",
+    @WrapOperation(method = "tick", at = @At(value = "INVOKE",
               target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
     private static boolean movableTEsetBlockState0(
             Level world, BlockPos blockPos_1, BlockState blockAState_2, int int_1,
+            Operation<Boolean> original,
             Level world2, BlockPos blockPos, BlockState blockState, PistonMovingBlockEntity pistonBlockEntity)
     {
         if (!CarpetSettings.movableBlockEntities)
-            return world.setBlock(blockPos_1, blockAState_2, int_1);
+            return original.call(world, blockPos_1, blockAState_2, int_1);
         else
             return ((LevelInterface) (world)).setBlockStateWithBlockEntity(blockPos_1, blockAState_2, ((PistonBlockEntityInterface)pistonBlockEntity).getCarriedBlockEntity(), int_1);
     }
     
-    @Redirect(method = "finalTick", at = @At(value = "INVOKE",
+    @WrapOperation(method = "finalTick", at = @At(value = "INVOKE",
               target = "Lnet/minecraft/world/level/Level;setBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;I)Z"))
-    private boolean movableTEsetBlockState1(Level world, BlockPos blockPos_1, BlockState blockState_2, int int_1)
+    private boolean movableTEsetBlockState1(Level world, BlockPos blockPos_1, BlockState blockState_2, int int_1, Operation<Boolean> original)
     {
         if (!CarpetSettings.movableBlockEntities)
-            return world.setBlock(blockPos_1, blockState_2, int_1);
+            return original.call(world, blockPos_1, blockState_2, int_1);
         else
         {
             boolean ret = ((LevelInterface) (world)).setBlockStateWithBlockEntity(blockPos_1, blockState_2, this.carriedBlockEntity, int_1);
