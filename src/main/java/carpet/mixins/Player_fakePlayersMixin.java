@@ -1,11 +1,12 @@
 package carpet.mixins;
 
 import carpet.patches.EntityPlayerMPFake;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(Player.class)
 public abstract class Player_fakePlayersMixin
@@ -13,7 +14,7 @@ public abstract class Player_fakePlayersMixin
     /**
      * To make sure player attacks are able to knockback fake players
      */
-    @Redirect(
+    @WrapOperation(
             method = "causeExtraKnockback",
             at = @At(
                     value = "FIELD",
@@ -21,8 +22,8 @@ public abstract class Player_fakePlayersMixin
                     ordinal = 0
             )
     )
-    private boolean velocityModifiedAndNotCarpetFakePlayer(Entity target)
+    private boolean velocityModifiedAndNotCarpetFakePlayer(Entity target, Operation<Boolean> original)
     {
-        return target.hurtMarked && !(target instanceof EntityPlayerMPFake);
+        return original.call(target) && !(target instanceof EntityPlayerMPFake);
     }
 }
