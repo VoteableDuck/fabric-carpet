@@ -1,6 +1,8 @@
 package carpet.patches;
 
 import carpet.CarpetSettings;
+import carpet.fakes.ServerPlayerInterface;
+import carpet.utils.Messenger;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -37,8 +39,7 @@ import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.phys.Vec3;
-import carpet.fakes.ServerPlayerInterface;
-import carpet.utils.Messenger;
+import net.neoforged.neoforge.network.connection.ConnectionType;
 
 import java.util.HashSet;
 import java.util.Optional;
@@ -100,7 +101,11 @@ public class EntityPlayerMPFake extends ServerPlayer
 
             EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, current, ClientInformation.createDefault(), false);
             instance.fixStartingPosition = () -> instance.snapTo(pos.x, pos.y, pos.z, (float) yaw, (float) pitch);
-            server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), instance, new CommonListenerCookie(current, 0, instance.clientInformation(), false));
+            server.getPlayerList().placeNewPlayer(
+                    new FakeClientConnection(PacketFlow.SERVERBOUND),
+                    instance,
+                    new CommonListenerCookie(current, 0, instance.clientInformation(), false, ConnectionType.OTHER)
+            );
             loadPlayerData(instance);
             instance.stopRiding(); // otherwise the created fake player will be on the vehicle
             instance.teleportTo(worldIn, pos.x, pos.y, pos.z, Set.of(), (float) yaw, (float) pitch, true);
@@ -142,7 +147,11 @@ public class EntityPlayerMPFake extends ServerPlayer
         GameProfile gameprofile = player.getGameProfile();
         EntityPlayerMPFake playerShadow = new EntityPlayerMPFake(server, worldIn, gameprofile, player.clientInformation(), true);
         playerShadow.setChatSession(player.getChatSession());
-        server.getPlayerList().placeNewPlayer(new FakeClientConnection(PacketFlow.SERVERBOUND), playerShadow, new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true));
+        server.getPlayerList().placeNewPlayer(
+                new FakeClientConnection(PacketFlow.SERVERBOUND),
+                playerShadow,
+                new CommonListenerCookie(gameprofile, 0, player.clientInformation(), true, ConnectionType.OTHER)
+        );
         loadPlayerData(playerShadow);
 
         playerShadow.setHealth(player.getHealth());
