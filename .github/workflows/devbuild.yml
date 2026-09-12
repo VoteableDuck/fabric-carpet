@@ -50,7 +50,7 @@ jobs:
           test -n "$(find artifact -maxdepth 1 -type f -name '*.jar' -print -quit)"
           ls -lh artifact
 
-      - name: Production server JAR, fake-player, and Scarpet smoke test
+      - name: Production server JAR, fake-player, Scarpet, and movable-BE smoke test
         shell: bash
         run: |
           set -euo pipefail
@@ -76,6 +76,8 @@ jobs:
             fake_spawned=0
             fake_removed=0
             scarpet_ok=0
+            movable_be_block_ok=0
+            movable_be_data_ok=0
 
             for _ in $(seq 1 180); do
               if grep -Eq 'Done \([0-9.]+s\)!|Done \(' production-server.log logs/latest.log 2>/dev/null; then
@@ -105,6 +107,36 @@ jobs:
               if [ "$scarpet_ok" -eq 1 ]; then
                 echo 'Production Scarpet expression executed successfully.'
               fi
+
+              # Exercise the actual movableBlockEntities rule with a chest that
+              # contains an item. This catches NeoForge BlockEntity lifecycle
+              # regressions that a startup-only smoke test cannot detect.
+              echo 'forceload add 0 0' >&3
+              echo 'carpet movableBlockEntities true' >&3
+              echo 'setblock 4 100 0 minecraft:piston[facing=east]' >&3
+              echo 'setblock 5 100 0 minecraft:chest' >&3
+              echo 'item replace block 5 100 0 container.0 with minecraft:diamond 3' >&3
+              echo 'setblock 3 100 0 minecraft:redstone_block' >&3
+              sleep 2
+              echo 'execute if block 6 100 0 minecraft:chest run say CARPET_MOVABLE_BE_BLOCK_OK' >&3
+              echo 'execute if items block 6 100 0 container.0 minecraft:diamond run say CARPET_MOVABLE_BE_DATA_OK' >&3
+
+              for _ in $(seq 1 30); do
+                if grep -q 'CARPET_MOVABLE_BE_BLOCK_OK' production-server.log logs/latest.log 2>/dev/null; then
+                  movable_be_block_ok=1
+                fi
+                if grep -q 'CARPET_MOVABLE_BE_DATA_OK' production-server.log logs/latest.log 2>/dev/null; then
+                  movable_be_data_ok=1
+                fi
+                if [ "$movable_be_block_ok" -eq 1 ] && [ "$movable_be_data_ok" -eq 1 ]; then
+                  echo 'Production movable block-entity piston test preserved the chest and its contents.'
+                  break
+                fi
+                if ! kill -0 "$server_pid" 2>/dev/null; then
+                  break
+                fi
+                sleep 1
+              done
 
               echo 'player CarpetSmoke spawn' >&3
               for _ in $(seq 1 30); do
@@ -167,6 +199,8 @@ jobs:
 
             test "$ready" -eq 1
             test "$scarpet_ok" -eq 1
+            test "$movable_be_block_ok" -eq 1
+            test "$movable_be_data_ok" -eq 1
             test "$fake_spawned" -eq 1
             test "$fake_removed" -eq 1
           )
