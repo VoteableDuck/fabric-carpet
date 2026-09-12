@@ -2,6 +2,8 @@ package carpet.mixins;
 
 import carpet.CarpetSettings;
 import carpet.fakes.WorldChunkInterface;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.SectionPos;
@@ -27,7 +29,6 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(LevelChunk.class)
 public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements WorldChunkInterface
@@ -51,14 +52,14 @@ public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements W
     // Fix Failure: If a moving BlockEntity is placed while BlockEntities are ticking, this will not find it and then replace it with a new TileEntity!
     // blockEntity_2 = this.getBlockEntity(blockPos_1, WorldChunk.CreationType.CHECK);
     // question is - with the changes in the BE handling this might not be a case anymore
-    @Redirect(method = "setBlockState", at = @At(value = "INVOKE", ordinal = 0,
+    @WrapOperation(method = "setBlockState", at = @At(value = "INVOKE", ordinal = 0,
             target = "Lnet/minecraft/world/level/chunk/LevelChunk;getBlockEntity(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/chunk/LevelChunk$EntityCreationType;)Lnet/minecraft/world/level/block/entity/BlockEntity;"))
     private BlockEntity ifGetBlockEntity(LevelChunk worldChunk, BlockPos blockPos_1,
-            LevelChunk.EntityCreationType worldChunk$CreationType_1)
+            LevelChunk.EntityCreationType worldChunk$CreationType_1, Operation<BlockEntity> original)
     {
         if (!CarpetSettings.movableBlockEntities)
         {
-            return this.getBlockEntity(blockPos_1, LevelChunk.EntityCreationType.CHECK);
+            return original.call(worldChunk, blockPos_1, worldChunk$CreationType_1);
         }
         else
         {
