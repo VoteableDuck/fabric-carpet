@@ -5,18 +5,8 @@ import carpet.fakes.DefaultRedstoneWireEvaluatorInferface;
 import carpet.fakes.RedstoneWireBlockInterface;
 import carpet.helpers.RedstoneWireTurbo;
 import com.google.common.collect.Sets;
-import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
-import net.minecraft.world.level.redstone.Orientation;
-import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.gen.Accessor;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import java.util.Set;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -24,16 +14,21 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RedStoneWireBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.redstone.DefaultRedstoneWireEvaluator;
+import net.minecraft.world.level.redstone.Orientation;
+import net.minecraft.world.level.redstone.RedstoneWireEvaluator;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import org.jspecify.annotations.Nullable;
+import java.util.Set;
 
 import static net.minecraft.world.level.block.RedStoneWireBlock.POWER;
 
 @Mixin(RedStoneWireBlock.class)
 public abstract class RedstoneWireBlock_fastMixin implements RedstoneWireBlockInterface {
-
-    @Shadow
-    private void updatePowerStrength(Level world_1, BlockPos blockPos_1, BlockState blockState_1, @Nullable final Orientation orientation, boolean sup) { }
 
     @Override
     @Accessor("shouldSignal")
@@ -43,7 +38,7 @@ public abstract class RedstoneWireBlock_fastMixin implements RedstoneWireBlockIn
     @Accessor("shouldSignal")
     public abstract boolean getWiresGivePower();
 
-    private RedstoneWireEvaluator legacy = new DefaultRedstoneWireEvaluator((RedStoneWireBlock)(Object) this);
+    private final RedstoneWireEvaluator legacy = new DefaultRedstoneWireEvaluator((RedStoneWireBlock)(Object) this);
 
     // =
 
@@ -57,15 +52,19 @@ public abstract class RedstoneWireBlock_fastMixin implements RedstoneWireBlockIn
 
     // =
 
-    public void fastUpdate(Level world, BlockPos pos, BlockState state, Orientation o, boolean sup) {
-        // [CM] fastRedstoneDust -- update based on carpet rule
-        if (CarpetSettings.fastRedstoneDust) {
-            BlockPos source = null; // todo this probably removes all improvements from the original method
-            // so needs to be evaluated if its worth keeping
-            wireTurbo.updateSurroundingRedstone(world, pos, state, source);
-            return;
+    /**
+     * @return true when Carpet handled the update and the wrapped vanilla/
+     * NeoForge operation should be skipped.
+     */
+    private boolean fastUpdate(Level world, BlockPos pos, BlockState state, Orientation orientation, boolean suppressShapeUpdates) {
+        if (!CarpetSettings.fastRedstoneDust) {
+            return false;
         }
-        updatePowerStrength(world, pos, state, o, sup);
+
+        BlockPos source = null; // todo this probably removes all improvements from the original method
+        // so needs to be evaluated if its worth keeping
+        wireTurbo.updateSurroundingRedstone(world, pos, state, source);
+        return true;
     }
 
     /**
@@ -113,38 +112,26 @@ public abstract class RedstoneWireBlock_fastMixin implements RedstoneWireBlockIn
 
     // =
 
-
-    @Redirect(method = "onPlace", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/RedStoneWireBlock;updatePowerStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;Z)V"))
-    private void redirectOnBlockAddedUpdate(RedStoneWireBlock self, Level world_1, BlockPos blockPos_1, BlockState blockState_1, Orientation o, boolean sup) {
-        fastUpdate(world_1, blockPos_1, blockState_1, o, sup);
+    @WrapOperation(method = "onPlace", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/RedStoneWireBlock;updatePowerStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;Z)V"))
+    private void carpet$onBlockAddedUpdate(RedStoneWireBlock self, Level world, BlockPos pos, BlockState state, Orientation orientation, boolean suppressShapeUpdates, Operation<Void> original) {
+        if (!fastUpdate(world, pos, state, orientation, suppressShapeUpdates)) {
+            original.call(self, world, pos, state, orientation, suppressShapeUpdates);
+        }
     }
 
-    @Redirect(method = "affectNeighborsAfterRemoval", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/RedStoneWireBlock;updatePowerStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;Z)V"))
-    private void redirectOnStateReplacedUpdate(RedStoneWireBlock self, Level world_1, BlockPos blockPos_1, BlockState blockState_1, Orientation o, boolean sup) {
-        fastUpdate(world_1, blockPos_1, blockState_1, o, sup);
+    @WrapOperation(method = "affectNeighborsAfterRemoval", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/block/RedStoneWireBlock;updatePowerStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;Z)V"))
+    private void carpet$onStateReplacedUpdate(RedStoneWireBlock self, Level world, BlockPos pos, BlockState state, Orientation orientation, boolean suppressShapeUpdates, Operation<Void> original) {
+        if (!fastUpdate(world, pos, state, orientation, suppressShapeUpdates)) {
+            original.call(self, world, pos, state, orientation, suppressShapeUpdates);
+        }
     }
 
-    @Redirect(method = "neighborChanged", at = @At(value = "INVOKE", target =
+    @WrapOperation(method = "neighborChanged", at = @At(value = "INVOKE", target =
             "Lnet/minecraft/world/level/block/RedStoneWireBlock;updatePowerStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;Z)V"
-            //"Lnet/minecraft/world/level/block/RedStoneWireBlock;updatePowerStrength(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/redstone/Orientation;)V"
     ))
-    //private void red(final RedStoneWireBlock instance, final Level level,
-    //                 final BlockPos blockPos, final BlockState blockState, final Orientation orientation)
-    private void redirectNeighborUpdateUpdate(
-            RedStoneWireBlock self,
-            Level world_1,
-            BlockPos blockPos_1,
-            BlockState blockState_1,
-            Orientation o,
-            boolean sup,
-            BlockState blockState_2,
-            Level world_2,
-            BlockPos blockPos_2,
-            Block block_1,
-            Orientation o2,
-            boolean b
-            )
-    {
-        fastUpdate(world_1, blockPos_1, blockState_1, o, sup);
+    private void carpet$neighborUpdate(RedStoneWireBlock self, Level world, BlockPos pos, BlockState state, Orientation orientation, boolean suppressShapeUpdates, Operation<Void> original) {
+        if (!fastUpdate(world, pos, state, orientation, suppressShapeUpdates)) {
+            original.call(self, world, pos, state, orientation, suppressShapeUpdates);
+        }
     }
 }
