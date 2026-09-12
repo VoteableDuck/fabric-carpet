@@ -36,7 +36,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build
-        run: ./gradlew --no-daemon clean build
+        run: ./gradlew --no-daemon clean build --stacktrace
 
       - name: Collect distributable JAR
         shell: bash
