@@ -1,6 +1,8 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.Block;
@@ -8,27 +10,26 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlac
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(StructureTemplate.class)
 public class StructureTemplate_fillUpdatesMixin
 {
-    @Redirect( method = "placeInWorld", at = @At(
+    @WrapOperation(method = "placeInWorld", at = @At(
             value = "INVOKE",
-            target =  "Lnet/minecraft/world/level/ServerLevelAccessor;updateNeighborsAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;)V"
+            target = "Lnet/minecraft/world/level/ServerLevelAccessor;updateNeighborsAt(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/Block;)V"
     ))
-    private void skipUpdateNeighbours(ServerLevelAccessor serverWorldAccess, BlockPos pos, Block block)
+    private void skipUpdateNeighbours(ServerLevelAccessor serverWorldAccess, BlockPos pos, Block block, Operation<Void> original)
     {
         if (!CarpetSettings.impendingFillSkipUpdates.get())
-            serverWorldAccess.updateNeighborsAt(pos, block);
+            original.call(serverWorldAccess, pos, block);
     }
 
-    @Redirect(method = "placeInWorld", at = @At(
+    @WrapOperation(method = "placeInWorld", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructurePlaceSettings;getKnownShape()Z"
     ))
-    private boolean skipPostprocess(StructurePlaceSettings structurePlacementData)
+    private boolean skipPostprocess(StructurePlaceSettings structurePlacementData, Operation<Boolean> original)
     {
-        return structurePlacementData.getKnownShape() || CarpetSettings.impendingFillSkipUpdates.get();
+        return original.call(structurePlacementData) || CarpetSettings.impendingFillSkipUpdates.get();
     }
 }
