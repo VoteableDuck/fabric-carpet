@@ -280,6 +280,9 @@ def main() -> int:
     parser.add_argument("--neoforge-version", required=True)
     parser.add_argument("--assets-dir", required=True, type=Path)
     parser.add_argument("--timeout", type=int, default=120)
+    parser.add_argument("--quick-play-multiplayer")
+    parser.add_argument("--required-marker")
+    parser.add_argument("--stability-seconds", type=int, default=0)
     args = parser.parse_args()
 
     install_dir = args.install_dir.resolve()
@@ -355,6 +358,8 @@ def main() -> int:
     program_args = [expand(value, placeholders) for value in program_args]
     jvm_args = [expand(value, placeholders) for value in jvm_args]
     program_args.append("--offlineDeveloperMode")
+    if args.quick_play_multiplayer:
+        program_args.extend(["--quickPlayMultiplayer", args.quick_play_multiplayer])
 
     unresolved = [value for value in (*jvm_args, *program_args) if "${" in value]
     if unresolved:
@@ -382,17 +387,32 @@ def main() -> int:
         while time.monotonic() < deadline:
             return_code = process.poll()
             combined = tail(output_path) + "\n" + tail(install_dir / "logs" / "latest.log")
-            if any(marker in combined for marker in READY_MARKERS):
-                ready = True
+            if args.required_marker:
+                ready = args.required_marker in combined
+            else:
+                ready = any(marker in combined for marker in READY_MARKERS)
+            if ready:
                 break
             if return_code is not None:
                 break
             time.sleep(1)
 
+        if ready and args.stability_seconds > 0:
+            stability_deadline = time.monotonic() + args.stability_seconds
+            while time.monotonic() < stability_deadline:
+                if process.poll() is not None:
+                    ready = False
+                    print("NeoForge production client exited during the stability window.", file=sys.stderr)
+                    break
+                time.sleep(0.25)
+
         if ready:
-            print("NeoForge production client reached renderer/audio ready state.")
+            if args.required_marker:
+                print(f"NeoForge production client observed required marker: {args.required_marker}")
+            else:
+                print("NeoForge production client reached renderer/audio ready state.")
             terminate_process_group(process)
-        elif process.poll() is None:
+        elif process.poll() is None and not args.required_marker:
             # Staying alive through the full window still proves the packaged JAR
             # did not reproduce a bootstrap/mixin crash, even if a renderer marker
             # changes in a future Minecraft build.
@@ -400,7 +420,11 @@ def main() -> int:
             ready = True
             terminate_process_group(process)
         else:
-            print(f"NeoForge production client exited early with code {process.returncode}.", file=sys.stderr)
+            if process.poll() is None:
+                print(f"NeoForge production client did not observe required marker within {args.timeout}s.", file=sys.stderr)
+                terminate_process_group(process)
+            else:
+                print(f"NeoForge production client exited early with code {process.returncode}.", file=sys.stderr)
 
     print("===== production client stdout/stderr =====")
     print(tail(output_path, 120000))
