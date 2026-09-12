@@ -1,6 +1,8 @@
 package carpet.mixins;
 
 import carpet.CarpetSettings;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.commands.SummonCommand;
 import net.minecraft.server.level.ServerLevel;
@@ -13,33 +15,34 @@ import net.minecraft.world.entity.animal.equine.SkeletonHorse;
 import net.minecraft.world.level.gamerules.GameRules;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 @Mixin(SummonCommand.class)
 public class SummonCommand_lightningMixin
 {
-    @Redirect(method = "createEntity", at = @At(
+    @WrapOperation(method = "createEntity", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Entity;blockPosition()Lnet/minecraft/core/BlockPos;"
     ))
-    private static BlockPos addRiders(Entity entity)
+    private static BlockPos addRiders(Entity entity, Operation<BlockPos> original)
     {
-        // [CM] SummonNaturalLightning - if statement around
+        BlockPos at = original.call(entity);
+        // [CM] SummonNaturalLightning - preserve vanilla/NeoForge block-position operation and add natural side effects.
         if (CarpetSettings.summonNaturalLightning && entity instanceof LightningBolt && !entity.level().isClientSide())
         {
             ServerLevel world = (ServerLevel) entity.level();
-            BlockPos at = entity.blockPosition();
-            DifficultyInstance localDifficulty_1 =  world.getCurrentDifficultyAt(at);
-            boolean boolean_2 = world.getGameRules().get(GameRules.SPAWN_MOBS) && world.random.nextDouble() < (double)localDifficulty_1.getEffectiveDifficulty() * 0.01D;
-            if (boolean_2) {
-                SkeletonHorse skeletonHorseEntity_1 = EntityType.SKELETON_HORSE.create(world, EntitySpawnReason.EVENT);
-                skeletonHorseEntity_1.setTrap(true);
-                skeletonHorseEntity_1.setAge(0);
-                skeletonHorseEntity_1.setPos(entity.getX(), entity.getY(), entity.getZ());
-                world.addFreshEntity(skeletonHorseEntity_1);
+            DifficultyInstance localDifficulty = world.getCurrentDifficultyAt(at);
+            boolean spawnTrap = world.getGameRules().get(GameRules.SPAWN_MOBS)
+                    && world.random.nextDouble() < (double) localDifficulty.getEffectiveDifficulty() * 0.01D;
+            if (spawnTrap) {
+                SkeletonHorse skeletonHorse = EntityType.SKELETON_HORSE.create(world, EntitySpawnReason.EVENT);
+                if (skeletonHorse != null) {
+                    skeletonHorse.setTrap(true);
+                    skeletonHorse.setAge(0);
+                    skeletonHorse.setPos(entity.getX(), entity.getY(), entity.getZ());
+                    world.addFreshEntity(skeletonHorse);
+                }
             }
         }
-        return entity.blockPosition();
+        return at;
     }
-
 }

@@ -1,10 +1,11 @@
 package carpet.mixins;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_PICKS_UP_ITEM;
 
@@ -18,23 +19,22 @@ public abstract class Inventory_scarpetEventMixin
 {
     @Shadow @Final public Player player;
 
-    @Redirect(method = "add(Lnet/minecraft/world/item/ItemStack;)Z", at = @At(
+    @WrapOperation(method = "add(Lnet/minecraft/world/item/ItemStack;)Z", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/entity/player/Inventory;add(ILnet/minecraft/world/item/ItemStack;)Z"
     ))
-    private boolean onItemAcquired(Inventory playerInventory, int slot, ItemStack stack)
+    private boolean onItemAcquired(Inventory playerInventory, int slot, ItemStack stack, Operation<Boolean> original)
     {
         if (!PLAYER_PICKS_UP_ITEM.isNeeded() || !(player instanceof ServerPlayer))
-            return playerInventory.add(-1, stack);
+            return original.call(playerInventory, slot, stack);
         int count = stack.getCount();
         ItemStack previous = stack.copy();
-        boolean res = playerInventory.add(-1, stack);
-        if (count != stack.getCount()) // res returns false for larger item adding to a almost full ineventory
+        boolean res = original.call(playerInventory, slot, stack);
+        if (count != stack.getCount()) // res returns false for larger item adding to an almost full inventory
         {
             ItemStack diffStack = previous.copyWithCount(count - stack.getCount());
             PLAYER_PICKS_UP_ITEM.onItemAction((ServerPlayer) player, null, diffStack);
         }
         return res;
     }
-
 }
