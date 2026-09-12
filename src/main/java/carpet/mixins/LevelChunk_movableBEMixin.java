@@ -152,7 +152,7 @@ public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements W
         }
 
 
-                if (chunkSection.getBlockState(x, chunkY, z).getBlock() != newBlock)
+        if (chunkSection.getBlockState(x, chunkY, z).getBlock() != newBlock)
         {
             return null;
         }
@@ -184,9 +184,12 @@ public abstract class LevelChunk_movableBEMixin extends ChunkAccess implements W
                 if (newBlockEntity != oldBlockEntity && newBlockEntity != null)
                 {
                     newBlockEntity.clearRemoved();
-                    this.level.setBlockEntity(newBlockEntity);
                     newBlockEntity.setBlockState(newBlockState);
-                    updateBlockEntityTicker(newBlockEntity);
+                    // NeoForge registers game-event listeners, ticker state and
+                    // queues BlockEntity.onLoad() from addAndRegisterBlockEntity.
+                    // A moved existing BE must re-enter that lifecycle just like
+                    // a newly placed BE; Level#setBlockEntity alone skips it.
+                    addAndRegisterBlockEntity(newBlockEntity);
                 }
             }
         }
