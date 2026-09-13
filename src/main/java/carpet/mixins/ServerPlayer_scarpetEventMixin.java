@@ -64,23 +64,35 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
     }
 
     /**
-     * NeoForge can cancel a player's death before vanilla ServerPlayer death
-     * handling runs. Carpet fake players have additional cleanup after
-     * super.die(), so remember the result of the existing NeoForge hook and let
-     * the fake-player override honor it without posting LivingDeathEvent twice.
+     * NeoForge can cancel player death before vanilla ServerPlayer death
+     * handling runs. Observe the result of the existing hook instead of
+     * posting another LivingDeathEvent. Scarpet must only report a death that
+     * NeoForge allowed, and Carpet fake players need the same result so their
+     * extra disconnect cleanup does not override another mod's cancellation.
      */
     @WrapOperation(method = "die", at = @At(
             value = "INVOKE",
             target = "Lnet/neoforged/neoforge/common/CommonHooks;onLivingDeath(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/damagesource/DamageSource;)Z",
             remap = false
     ))
-    private boolean captureNeoForgeDeathCancellation(LivingEntity entity, DamageSource source, Operation<Boolean> original)
+    private boolean handleNeoForgeDeathCancellation(LivingEntity entity, DamageSource source, Operation<Boolean> original)
     {
         boolean cancelled = original.call(entity, source);
+
         if (entity instanceof EntityPlayerMPFake fakePlayer)
         {
             fakePlayer.setNeoForgeDeathCancelled(cancelled);
         }
+
+        if (!cancelled)
+        {
+            ((EntityInterface)this).getEventContainer().onEvent(EntityEventsGroup.Event.ON_DEATH, source.getMsgId());
+            if (PLAYER_DIES.isNeeded())
+            {
+                PLAYER_DIES.onPlayerEvent((ServerPlayer) (Object)this);
+            }
+        }
+
         return cancelled;
     }
 
@@ -88,16 +100,6 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
     private void grabStat(Stat<?> stat, int amount, CallbackInfo ci)
     {
         STATISTICS.onPlayerStatistic((ServerPlayer) (Object)this, stat, amount);
-    }
-
-    @Inject(method = "die", at = @At("HEAD"))
-    private void onDeathEvent(DamageSource source, CallbackInfo ci)
-    {
-        ((EntityInterface)this).getEventContainer().onEvent(EntityEventsGroup.Event.ON_DEATH, source.getMsgId());
-        if (PLAYER_DIES.isNeeded())
-        {
-            PLAYER_DIES.onPlayerEvent((ServerPlayer) (Object)this);
-        }
     }
 
     private Vec3 previousLocation;
