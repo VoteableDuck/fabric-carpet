@@ -71,7 +71,16 @@ public abstract class ServerLevel_scarpetMixin extends Level implements ServerWo
         return getGameRules().get(rule) ? Explosion.BlockInteraction.DESTROY_WITH_DECAY : Explosion.BlockInteraction.DESTROY;
     }
 
-    @Inject(method = "explode", at = @At("HEAD"), cancellable = true)
+    /**
+     * NeoForge fires its cancellable ExplosionEvent.Start after constructing the
+     * ServerExplosion. Run Scarpet's explosion event only after that hook has
+     * allowed the explosion, but still before ServerExplosion#explode applies it.
+     */
+    @Inject(method = "explode", at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/level/ServerExplosion;explode()I",
+            shift = At.Shift.BEFORE
+    ), cancellable = true)
     private void handleExplosion(Entity entity, DamageSource damageSource, ExplosionDamageCalculator explosionDamageCalculator, double x, double y, double z, float g, boolean bl, ExplosionInteraction explosionInteraction, ParticleOptions particleOptions, ParticleOptions particleOptions2, WeightedList<ExplosionParticleInfo> weightedList, Holder<SoundEvent> holder, CallbackInfo ci)
     {
         if (EXPLOSION.isNeeded()) {
