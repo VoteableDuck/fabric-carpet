@@ -42,6 +42,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.connection.ConnectionType;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -98,6 +99,14 @@ public class EntityPlayerMPFake extends ServerPlayer
                     instance,
                     new CommonListenerCookie(current, 0, instance.clientInformation(), false, ConnectionType.OTHER)
             );
+
+            // NeoForge and some client-side skin providers can observe the player
+            // before the fake-player profile is present in their player-info cache.
+            // Re-send a complete initializing entry after placeNewPlayer so the
+            // client gets the resolved GameProfile (including its UUID/name and
+            // texture properties when available) and SkinManager can resolve it.
+            server.getPlayerList().broadcastAll(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(instance)));
+
             loadPlayerData(instance);
             instance.stopRiding(); // otherwise the created fake player will be on the vehicle
             instance.teleportTo(worldIn, pos.x, pos.y, pos.z, Set.of(), (float) yaw, (float) pitch, true);
