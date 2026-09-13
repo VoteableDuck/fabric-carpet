@@ -15,11 +15,11 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_ATTACKS_ENTITY;
@@ -69,17 +69,30 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
         }
     }
 
-    @Inject(method = "interactOn", cancellable = true, at = @At("HEAD"))
-    private void doInteract(Entity entity, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir)
+    /**
+     * NeoForge's EntityInteract event can cancel the interaction before vanilla
+     * entity interaction runs. Compose Scarpet after that hook so a NeoForge
+     * cancellation is not reported as an interaction, while preserving
+     * Scarpet's ability to stop the accepted interaction with PASS.
+     */
+    @WrapOperation(method = "interactOn", at = @At(
+            value = "INVOKE",
+            target = "Lnet/neoforged/neoforge/common/CommonHooks;onInteractEntity(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/world/InteractionHand;Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/InteractionResult;",
+            remap = false
+    ))
+    private InteractionResult carpet$afterNeoForgeInteractEvent(Player player, Entity target, InteractionHand hand, Vec3 location, Operation<InteractionResult> original)
     {
-        if (!level().isClientSide() && PLAYER_INTERACTS_WITH_ENTITY.isNeeded())
+        InteractionResult cancelResult = original.call(player, target, hand, location);
+        if (cancelResult != null)
         {
-            if (PLAYER_INTERACTS_WITH_ENTITY.onEntityHandAction((ServerPlayer) (Object)this, entity, hand))
-            {
-                cir.setReturnValue(InteractionResult.PASS);
-                cir.cancel();
-            }
+            return cancelResult;
         }
+        if (player instanceof ServerPlayer serverPlayer && PLAYER_INTERACTS_WITH_ENTITY.isNeeded()
+                && PLAYER_INTERACTS_WITH_ENTITY.onEntityHandAction(serverPlayer, target, hand))
+        {
+            return InteractionResult.PASS;
+        }
+        return null;
     }
 
     /**
@@ -100,9 +113,9 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
         {
             return false;
         }
-        if (!level().isClientSide() && PLAYER_ATTACKS_ENTITY.isNeeded() && target.isAttackable())
+        if (player instanceof ServerPlayer serverPlayer && PLAYER_ATTACKS_ENTITY.isNeeded() && target.isAttackable())
         {
-            return !PLAYER_ATTACKS_ENTITY.onEntityHandAction((ServerPlayer)(Object)this, target, null);
+            return !PLAYER_ATTACKS_ENTITY.onEntityHandAction(serverPlayer, target, null);
         }
         return true;
     }
