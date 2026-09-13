@@ -199,12 +199,23 @@ public final class CarpetPlatform {
     }
 
     private static void sanitize(List<String> args) {
-        for (int i = 0; i < args.size(); i++) {
+        for (int i = 0; i < args.size();) {
             String arg = args.get(i);
-            if (arg.equals("--accessToken") || arg.equals("--clientId") || arg.equals("--uuid") || arg.equals("--xuid")) {
-                if (i + 1 < args.size()) args.set(++i, "<redacted>");
+            if (i + 1 < args.size() && arg.startsWith("--") && isSensitiveLaunchArgument(arg.substring(2))) {
+                args.remove(i);
+                args.remove(i);
+            } else {
+                i++;
             }
         }
+    }
+
+    private static boolean isSensitiveLaunchArgument(String name) {
+        return switch (name.toLowerCase(java.util.Locale.ENGLISH)) {
+            case "accesstoken", "clientid", "profileproperties", "proxypass", "proxyuser",
+                    "username", "userproperties", "uuid", "xuid" -> true;
+            default -> false;
+        };
     }
 
     public static final class VersionParsingException extends Exception {
