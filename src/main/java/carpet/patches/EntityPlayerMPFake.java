@@ -305,7 +305,15 @@ public class EntityPlayerMPFake extends ServerPlayer
     @Override
     public ServerPlayer teleport(TeleportTransition serverLevel)
     {
-        super.teleport(serverLevel);
+        ServerPlayer teleported = super.teleport(serverLevel);
+        // NeoForge's TravelToDimensionEvent may cancel the transition. Match
+        // ServerPlayer#teleport's nullable contract and do not run Carpet's
+        // fake-player post-teleport bookkeeping when no travel occurred.
+        if (teleported == null)
+        {
+            return null;
+        }
+
         if (wonGame) {
             ServerboundClientCommandPacket p = new ServerboundClientCommandPacket(ServerboundClientCommandPacket.Action.PERFORM_RESPAWN);
             connection.handleClientCommand(p);
