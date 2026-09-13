@@ -1,6 +1,7 @@
 package carpet.mixins;
 
 import carpet.fakes.ServerWorldInterface;
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
@@ -18,8 +19,6 @@ import net.minecraft.world.entity.LightningBolt;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.ExplosionDamageCalculator;
-import net.minecraft.world.level.gamerules.GameRule;
-import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.dimension.DimensionType;
@@ -37,8 +36,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
-import java.util.function.Supplier;
-
 import static carpet.script.CarpetEventServer.Event.EXPLOSION;
 import static carpet.script.CarpetEventServer.Event.LIGHTNING;
 import static carpet.script.CarpetEventServer.Event.CHUNK_UNLOADED;
@@ -46,8 +43,6 @@ import static carpet.script.CarpetEventServer.Event.CHUNK_UNLOADED;
 @Mixin(ServerLevel.class)
 public abstract class ServerLevel_scarpetMixin extends Level implements ServerWorldInterface
 {
-
-    @Shadow public abstract GameRules getGameRules();
 
     protected ServerLevel_scarpetMixin(WritableLevelData writableLevelData, ResourceKey<Level> resourceKey, RegistryAccess registryAccess, Holder<DimensionType> holder, boolean bl, boolean bl2, long l, int i)
     {
@@ -67,32 +62,22 @@ public abstract class ServerLevel_scarpetMixin extends Level implements ServerWo
         if (LIGHTNING.isNeeded()) LIGHTNING.onWorldEventFlag((ServerLevel) (Object)this, blockPos, bl2?1:0);
     }
 
-    private Explosion.BlockInteraction getCMDestroyType(final GameRule<Boolean> rule) {
-        return getGameRules().get(rule) ? Explosion.BlockInteraction.DESTROY_WITH_DECAY : Explosion.BlockInteraction.DESTROY;
-    }
-
     /**
      * NeoForge fires its cancellable ExplosionEvent.Start after constructing the
      * ServerExplosion. Run Scarpet's explosion event only after that hook has
      * allowed the explosion, but still before ServerExplosion#explode applies it.
+     * Use the BlockInteraction already calculated by ServerLevel so NeoForge's
+     * EntityMobGriefingEvent result is preserved without firing it a second time.
      */
     @Inject(method = "explode", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/world/level/ServerExplosion;explode()I",
             shift = At.Shift.BEFORE
     ), cancellable = true)
-    private void handleExplosion(Entity entity, DamageSource damageSource, ExplosionDamageCalculator explosionDamageCalculator, double x, double y, double z, float g, boolean bl, ExplosionInteraction explosionInteraction, ParticleOptions particleOptions, ParticleOptions particleOptions2, WeightedList<ExplosionParticleInfo> weightedList, Holder<SoundEvent> holder, CallbackInfo ci)
+    private void handleExplosion(Entity entity, DamageSource damageSource, ExplosionDamageCalculator explosionDamageCalculator, double x, double y, double z, float g, boolean bl, ExplosionInteraction explosionInteraction, ParticleOptions particleOptions, ParticleOptions particleOptions2, WeightedList<ExplosionParticleInfo> weightedList, Holder<SoundEvent> holder, CallbackInfo ci, @Local Explosion.BlockInteraction blockInteraction)
     {
         if (EXPLOSION.isNeeded()) {
-            Explosion.BlockInteraction var10000 = switch (explosionInteraction) {
-                case NONE -> Explosion.BlockInteraction.KEEP;
-                case BLOCK -> this.getCMDestroyType(GameRules.BLOCK_EXPLOSION_DROP_DECAY);
-                case MOB -> this.getGameRules().get(GameRules.MOB_GRIEFING) ? this.getCMDestroyType(GameRules.MOB_EXPLOSION_DROP_DECAY) : Explosion.BlockInteraction.KEEP;
-                case TNT -> this.getCMDestroyType(GameRules.TNT_EXPLOSION_DROP_DECAY);
-                case TRIGGER -> Explosion.BlockInteraction.TRIGGER_BLOCK;
-            };
-
-            boolean cancelled = EXPLOSION.onExplosion((ServerLevel) (Object) this, entity, null, new Vec3(x, y, z), g, bl, null, null, var10000);
+            boolean cancelled = EXPLOSION.onExplosion((ServerLevel) (Object) this, entity, null, new Vec3(x, y, z), g, bl, null, null, blockInteraction);
             if (cancelled) ci.cancel();
         }
     }
