@@ -3,6 +3,8 @@ package carpet.mixins;
 import carpet.fakes.EntityInterface;
 import carpet.fakes.LivingEntityInterface;
 import carpet.script.EntityEventsGroup;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -32,10 +34,24 @@ public abstract class LivingEntity_scarpetEventsMixin extends Entity implements 
         super(type, world);
     }
 
-    @Inject(method = "die", at = @At("HEAD"))
-    private void onDeathCall(DamageSource damageSource_1, CallbackInfo ci)
+    /**
+     * NeoForge can cancel LivingDeathEvent before vanilla death handling starts.
+     * Observe the result of the existing hook instead of posting another event,
+     * and only report Scarpet's ON_DEATH when NeoForge actually permits death.
+     */
+    @WrapOperation(method = "die", at = @At(
+            value = "INVOKE",
+            target = "Lnet/neoforged/neoforge/common/CommonHooks;onLivingDeath(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/damagesource/DamageSource;)Z",
+            remap = false
+    ))
+    private boolean handleNeoForgeDeathCancellation(LivingEntity entity, DamageSource source, Operation<Boolean> original)
     {
-        ((EntityInterface)this).getEventContainer().onEvent(EntityEventsGroup.Event.ON_DEATH, damageSource_1.getMsgId());
+        boolean cancelled = original.call(entity, source);
+        if (!cancelled)
+        {
+            ((EntityInterface)this).getEventContainer().onEvent(EntityEventsGroup.Event.ON_DEATH, source.getMsgId());
+        }
+        return cancelled;
     }
 
     @Inject(method = "actuallyHurt", cancellable = true, locals = LocalCapture.CAPTURE_FAILHARD, at = @At(
