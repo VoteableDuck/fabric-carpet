@@ -147,10 +147,14 @@ jobs:
               echo 'data get block 5 100 0' >&3
               echo 'data get block 6 100 0' >&3
 
-              echo 'execute if block 6 100 0 minecraft:chest run say CARPET_MOVABLE_BE_BLOCK_OK' >&3
-              echo 'execute if items block 6 100 0 container.0 minecraft:diamond run say CARPET_MOVABLE_BE_DATA_OK' >&3
-
+              # Poll the world state, not just the log. A piston can still be a
+              # moving_piston when the first check runs, so re-run the final
+              # assertions until its block event has fully completed.
               for _ in $(seq 1 30); do
+                echo 'execute if block 6 100 0 minecraft:chest run say CARPET_MOVABLE_BE_BLOCK_OK' >&3
+                echo 'execute if items block 6 100 0 container.0 minecraft:diamond run say CARPET_MOVABLE_BE_DATA_OK' >&3
+                sleep 1
+
                 if grep -q 'CARPET_MOVABLE_BE_BLOCK_OK' production-server.log logs/latest.log 2>/dev/null; then
                   movable_be_block_ok=1
                 fi
@@ -164,7 +168,6 @@ jobs:
                 if ! kill -0 "$server_pid" 2>/dev/null; then
                   break
                 fi
-                sleep 1
               done
 
               echo 'player CarpetSmoke spawn' >&3
