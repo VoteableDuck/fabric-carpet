@@ -2,6 +2,7 @@ package carpet.mixins;
 
 import carpet.fakes.EntityInterface;
 import carpet.fakes.ServerPlayerInterface;
+import carpet.patches.EntityPlayerMPFake;
 import carpet.script.EntityEventsGroup;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -13,6 +14,7 @@ import net.minecraft.stats.Stat;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.TeleportTransition;
@@ -59,6 +61,27 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
         {
             original.call(playerEntity);
         }
+    }
+
+    /**
+     * NeoForge can cancel a player's death before vanilla ServerPlayer death
+     * handling runs. Carpet fake players have additional cleanup after
+     * super.die(), so remember the result of the existing NeoForge hook and let
+     * the fake-player override honor it without posting LivingDeathEvent twice.
+     */
+    @WrapOperation(method = "die", at = @At(
+            value = "INVOKE",
+            target = "Lnet/neoforged/neoforge/common/CommonHooks;onLivingDeath(Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/damagesource/DamageSource;)Z",
+            remap = false
+    ))
+    private boolean captureNeoForgeDeathCancellation(LivingEntity entity, DamageSource source, Operation<Boolean> original)
+    {
+        boolean cancelled = original.call(entity, source);
+        if (entity instanceof EntityPlayerMPFake fakePlayer)
+        {
+            fakePlayer.setNeoForgeDeathCancelled(cancelled);
+        }
+        return cancelled;
     }
 
     @Inject(method = "awardStat", at = @At("HEAD"))
