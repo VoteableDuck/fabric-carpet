@@ -4,6 +4,8 @@ import carpet.fakes.ServerWorldInterface;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import com.llamalad7.mixinextras.sugar.Share;
+import com.llamalad7.mixinextras.sugar.ref.LocalBooleanRef;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
@@ -47,10 +49,30 @@ public abstract class ServerLevel_scarpetMixin extends Level implements ServerWo
     }
 
     /**
+     * Capture whether the horse trap entity itself was actually accepted by the
+     * level. NeoForge can cancel that EntityJoinLevelEvent independently from
+     * the lightning bolt, so the vanilla "decided to spawn a trap" flag is not
+     * sufficient for Scarpet's documented lightning mode.
+     */
+    @WrapOperation(method = "tickThunder", at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerLevel;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z",
+            ordinal = 0
+    ))
+    private boolean captureNaturalLightningTrap(ServerLevel level, Entity entity, Operation<Boolean> original,
+                                                @Share("carpet$lightningTrapAdded") LocalBooleanRef trapAdded)
+    {
+        boolean added = original.call(level, entity);
+        trapAdded.set(added);
+        return added;
+    }
+
+    /**
      * Scarpet documents the lightning event as firing after the strike, with the
-     * lightning entity (and possible horse trap) already spawned. NeoForge can
-     * cancel the lightning entity in EntityJoinLevelEvent, so only publish the
-     * Scarpet event after the actual addFreshEntity call succeeds.
+     * lightning entity and possible horse trap already spawned. NeoForge can
+     * cancel either entity independently in EntityJoinLevelEvent, so only publish
+     * the event after the lightning is accepted and report mode=true only when
+     * the trap entity was also actually added.
      */
     @WrapOperation(method = "tickThunder", at = @At(
             value = "INVOKE",
@@ -58,11 +80,12 @@ public abstract class ServerLevel_scarpetMixin extends Level implements ServerWo
             ordinal = 1
     ))
     private boolean onNaturalLightning(ServerLevel level, Entity entity, Operation<Boolean> original,
-                                       @Local BlockPos blockPos, @Local(ordinal = 1) boolean spawnedTrap)
+                                       @Local BlockPos blockPos,
+                                       @Share("carpet$lightningTrapAdded") LocalBooleanRef trapAdded)
     {
         boolean added = original.call(level, entity);
         if (added && LIGHTNING.isNeeded()) {
-            LIGHTNING.onWorldEventFlag(level, blockPos, spawnedTrap ? 1 : 0);
+            LIGHTNING.onWorldEventFlag(level, blockPos, trapAdded.get() ? 1 : 0);
         }
         return added;
     }
