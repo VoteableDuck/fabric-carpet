@@ -90,6 +90,14 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
     @Inject(method = "teleport", at = @At("RETURN"))
     private void atChangeDimension(TeleportTransition destinationP, CallbackInfoReturnable<Entity> cir)
     {
+        // NeoForge can cancel dimension travel before vanilla runs by returning
+        // null from ServerPlayer#teleport. Do not report a Scarpet dimension
+        // change when no teleport actually took place.
+        if (cir.getReturnValue() == null)
+        {
+            return;
+        }
+
         if (PLAYER_CHANGES_DIMENSION.isNeeded())
         {
             ServerPlayer player = (ServerPlayer) (Object)this;
