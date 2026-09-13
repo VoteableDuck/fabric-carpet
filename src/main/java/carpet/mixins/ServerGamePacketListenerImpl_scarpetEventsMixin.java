@@ -3,7 +3,9 @@ package carpet.mixins;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.crafting.RecipeManager;
+import net.neoforged.neoforge.event.entity.living.LivingSwapItemsEvent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
@@ -96,20 +98,25 @@ public class ServerGamePacketListenerImpl_scarpetEventsMixin
     }
 
     /**
-     * NeoForge replaces vanilla's direct hand-stack swap with
-     * CommonHooks.onLivingSwapHandItems, so the old ordinal-based
-     * getItemInHand injection no longer exists in the production class.
-     * Match the packet action itself instead; this keeps the Scarpet event
-     * before the swap and preserves its cancellation semantics.
+     * Observe the existing NeoForge hook after the packet has reached the server
+     * thread and passed the spectator check. A HEAD injection runs before those
+     * guards and can report rejected swaps (or execute scripts off-thread).
+     * Preserve NeoForge's cancellation and replacement stacks, while allowing
+     * Scarpet to cancel an otherwise accepted swap before either hand changes.
      */
-    @Inject(method = "handlePlayerAction", at = @At("HEAD"), cancellable = true)
-    private void onHandSwap(ServerboundPlayerActionPacket packet, CallbackInfo ci)
+    @WrapOperation(method = "handlePlayerAction", at = @At(
+            value = "INVOKE",
+            target = "Lnet/neoforged/neoforge/common/CommonHooks;onLivingSwapHandItems(Lnet/minecraft/world/entity/LivingEntity;)Lnet/neoforged/neoforge/event/entity/living/LivingSwapItemsEvent$Hands;",
+            remap = false
+    ))
+    private LivingSwapItemsEvent.Hands onHandSwap(LivingEntity entity, Operation<LivingSwapItemsEvent.Hands> original)
     {
-        if (packet.getAction() == ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND
-                && PLAYER_SWAPS_HANDS.onPlayerEvent(player))
+        LivingSwapItemsEvent.Hands event = original.call(entity);
+        if (!event.isCanceled() && PLAYER_SWAPS_HANDS.onPlayerEvent(player))
         {
-            ci.cancel();
+            event.setCanceled(true);
         }
+        return event;
     }
 
     @Inject(method = "handlePlayerAction", cancellable = true, at = @At(
