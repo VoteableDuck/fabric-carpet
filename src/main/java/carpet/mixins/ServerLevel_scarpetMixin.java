@@ -1,6 +1,8 @@
 package carpet.mixins;
 
 import carpet.fakes.ServerWorldInterface;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -10,13 +12,9 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
-import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.util.random.WeightedList;
-import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LightningBolt;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.ExplosionDamageCalculator;
 import net.minecraft.world.level.Level;
@@ -34,7 +32,6 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 
 import static carpet.script.CarpetEventServer.Event.EXPLOSION;
 import static carpet.script.CarpetEventServer.Event.LIGHTNING;
@@ -49,17 +46,25 @@ public abstract class ServerLevel_scarpetMixin extends Level implements ServerWo
         super(writableLevelData, resourceKey, registryAccess, holder, bl, bl2, l, i);
     }
 
-    @Inject(method = "tickThunder", locals = LocalCapture.CAPTURE_FAILHARD, at = @At(
+    /**
+     * Scarpet documents the lightning event as firing after the strike, with the
+     * lightning entity (and possible horse trap) already spawned. NeoForge can
+     * cancel the lightning entity in EntityJoinLevelEvent, so only publish the
+     * Scarpet event after the actual addFreshEntity call succeeds.
+     */
+    @WrapOperation(method = "tickThunder", at = @At(
             value = "INVOKE",
             target = "Lnet/minecraft/server/level/ServerLevel;addFreshEntity(Lnet/minecraft/world/entity/Entity;)Z",
-            shift = At.Shift.BEFORE,
             ordinal = 1
     ))
-    private void onNaturalLightinig(LevelChunk chunk, CallbackInfo ci,
-                                    //ChunkPos chunkPos, boolean bl, int i, int j, Profiler profiler, BlockPos blockPos, boolean bl2)
-                                    ChunkPos chunkPos, boolean bl, int i, int j, ProfilerFiller profiler, BlockPos blockPos, DifficultyInstance localDifficulty, boolean bl2, LightningBolt lightningEntity)
+    private boolean onNaturalLightning(ServerLevel level, Entity entity, Operation<Boolean> original,
+                                       @Local BlockPos blockPos, @Local(ordinal = 1) boolean spawnedTrap)
     {
-        if (LIGHTNING.isNeeded()) LIGHTNING.onWorldEventFlag((ServerLevel) (Object)this, blockPos, bl2?1:0);
+        boolean added = original.call(level, entity);
+        if (added && LIGHTNING.isNeeded()) {
+            LIGHTNING.onWorldEventFlag(level, blockPos, spawnedTrap ? 1 : 0);
+        }
+        return added;
     }
 
     /**
