@@ -10,7 +10,6 @@ import com.mojang.authlib.GameProfile;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.stats.Stat;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -24,13 +23,11 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_CHANGES_DIMENSION;
 import static carpet.script.CarpetEventServer.Event.PLAYER_DIES;
 import static carpet.script.CarpetEventServer.Event.PLAYER_FINISHED_USING_ITEM;
-import static carpet.script.CarpetEventServer.Event.STATISTICS;
 
 @Mixin(ServerPlayer.class)
 public abstract class ServerPlayer_scarpetEventMixin extends Player implements ServerPlayerInterface
@@ -94,12 +91,6 @@ public abstract class ServerPlayer_scarpetEventMixin extends Player implements S
         }
 
         return cancelled;
-    }
-
-    @Inject(method = "awardStat", at = @At("HEAD"))
-    private void grabStat(Stat<?> stat, int amount, CallbackInfo ci)
-    {
-        STATISTICS.onPlayerStatistic((ServerPlayer) (Object)this, stat, amount);
     }
 
     private Vec3 previousLocation;
