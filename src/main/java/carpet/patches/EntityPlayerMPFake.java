@@ -22,6 +22,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.server.players.OldUsersConverter;
+import net.minecraft.server.players.ProfileResolver;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -31,7 +32,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -83,20 +83,12 @@ public class EntityPlayerMPFake extends ServerPlayer
         String name = gameprofile.name();
         spawning.add(name);
 
-        fetchGameProfile(server, gameprofile.id()).whenCompleteAsync((p, t) -> {
+        fetchGameProfile(server, gameprofile).whenCompleteAsync((current, t) -> {
             // Always remove the name, even if exception occurs
             spawning.remove(name);
             if (t != null)
             {
                 return;
-            }
-
-            GameProfile current;
-            if (p.name().isEmpty()) {
-                current = gameprofile;
-            }
-            else {
-                current = p;
             }
 
             EntityPlayerMPFake instance = new EntityPlayerMPFake(server, worldIn, current, ClientInformation.createDefault(), false);
@@ -122,9 +114,23 @@ public class EntityPlayerMPFake extends ServerPlayer
         return true;
     }
 
-    private static CompletableFuture<GameProfile> fetchGameProfile(MinecraftServer server, final UUID name) {
-        final ResolvableProfile resolvableProfile = ResolvableProfile.createUnresolved(name);
-        return resolvableProfile.resolveProfile(server.services().profileResolver());
+    /**
+     * Resolve a fake player's complete online profile by name first so the
+     * returned GameProfile carries the signed textures property used for the
+     * skin. The UUID obtained by the legacy/offline lookup can be an offline
+     * UUID, which cannot be resolved to Mojang skin properties by id.
+     *
+     * If the name is not an online account (allowed by
+     * allowSpawningOfflinePlayers), fall back to the original UUID lookup and
+     * finally to the original offline profile so fake-player spawning keeps
+     * working without a skin service response.
+     */
+    private static CompletableFuture<GameProfile> fetchGameProfile(MinecraftServer server, GameProfile fallback) {
+        ProfileResolver resolver = server.services().profileResolver();
+        return CompletableFuture.supplyAsync(() -> resolver.fetchByName(fallback.name())
+                .or(() -> resolver.fetchById(fallback.id()))
+                .orElse(fallback))
+                .exceptionally(throwable -> fallback);
     }
 
     private static void loadPlayerData(EntityPlayerMPFake player)
