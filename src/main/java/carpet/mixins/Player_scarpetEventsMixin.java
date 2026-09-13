@@ -2,6 +2,9 @@ package carpet.mixins;
 
 import carpet.fakes.EntityInterface;
 import carpet.script.EntityEventsGroup;
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
@@ -18,7 +21,6 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
-import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_ATTACKS_ENTITY;
 import static carpet.script.CarpetEventServer.Event.PLAYER_DEALS_DAMAGE;
@@ -44,13 +46,15 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
         ((EntityInterface)this).getEventContainer().onEvent(EntityEventsGroup.Event.ON_DAMAGE, amount, source);
         if (PLAYER_TAKES_DAMAGE.isNeeded())
         {
-            if(PLAYER_TAKES_DAMAGE.onDamage(this, amount, source)) {
+            if (PLAYER_TAKES_DAMAGE.onDamage(this, amount, source))
+            {
                 ci.cancel();
             }
         }
         if (source.getEntity() instanceof ServerPlayer && PLAYER_DEALS_DAMAGE.isNeeded())
         {
-            if(PLAYER_DEALS_DAMAGE.onDamage(this, amount, source)) {
+            if (PLAYER_DEALS_DAMAGE.onDamage(this, amount, source))
+            {
                 ci.cancel();
             }
         }
@@ -70,28 +74,44 @@ public abstract class Player_scarpetEventsMixin extends LivingEntity
     {
         if (!level().isClientSide() && PLAYER_INTERACTS_WITH_ENTITY.isNeeded())
         {
-            if(PLAYER_INTERACTS_WITH_ENTITY.onEntityHandAction((ServerPlayer) (Object)this, entity, hand)) {
+            if (PLAYER_INTERACTS_WITH_ENTITY.onEntityHandAction((ServerPlayer) (Object)this, entity, hand))
+            {
                 cir.setReturnValue(InteractionResult.PASS);
                 cir.cancel();
             }
         }
     }
 
-    @Inject(method = "attack", at = @At("HEAD"), cancellable = true)
-    private void onAttack(Entity target, CallbackInfo ci)
+    /**
+     * NeoForge fires its cancellable AttackEntityEvent at the start of
+     * Player#attack. Let that hook decide first so Scarpet does not report an
+     * attack another mod has already rejected. Scarpet can still cancel an
+     * otherwise accepted attack by making the wrapped hook return false.
+     */
+    @WrapOperation(method = "attack", at = @At(
+            value = "INVOKE",
+            target = "Lnet/neoforged/neoforge/common/CommonHooks;onPlayerAttackTarget(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;)Z",
+            remap = false
+    ))
+    private boolean carpet$afterNeoForgeAttackEvent(Player player, Entity target, Operation<Boolean> original)
     {
+        boolean allowed = original.call(player, target);
+        if (!allowed)
+        {
+            return false;
+        }
         if (!level().isClientSide() && PLAYER_ATTACKS_ENTITY.isNeeded() && target.isAttackable())
         {
-            if(PLAYER_ATTACKS_ENTITY.onEntityHandAction((ServerPlayer) (Object)this, target, null)) {
-                ci.cancel();
-            }
+            return !PLAYER_ATTACKS_ENTITY.onEntityHandAction((ServerPlayer)(Object)this, target, null);
         }
+        return true;
     }
 
     @ModifyReturnValue(method = "wantsToStopRiding", at = @At("TAIL"))
     private boolean dontUnmountFromIfPermanentVehicle(boolean original)
     {
-        if (this.getVehicle() == null) {
+        if (this.getVehicle() == null)
+        {
             // may also be called when leaving entity camera in spectator
             return original;
         }
