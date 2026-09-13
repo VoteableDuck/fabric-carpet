@@ -55,6 +55,7 @@ public class EntityPlayerMPFake extends ServerPlayer
 
     public Runnable fixStartingPosition = () -> {};
     public boolean isAShadow;
+    private boolean neoForgeDeathCancelled;
 
     // Returns true if it was successful, false if couldn't spawn due to the player not existing in Mojang servers
     public static boolean createFake(String username, MinecraftServer server, Vec3 pos, double yaw, double pitch, ResourceKey<Level> dimensionId, GameType gamemode, boolean flying)
@@ -195,6 +196,11 @@ public class EntityPlayerMPFake extends ServerPlayer
         return spawning.contains(username);
     }
 
+    public void setNeoForgeDeathCancelled(boolean cancelled)
+    {
+        this.neoForgeDeathCancelled = cancelled;
+    }
+
     private EntityPlayerMPFake(MinecraftServer server, ServerLevel worldIn, GameProfile profile, ClientInformation cli, boolean shadow)
     {
         super(server, worldIn, profile, cli);
@@ -280,7 +286,13 @@ public class EntityPlayerMPFake extends ServerPlayer
     public void die(DamageSource cause)
     {
         shakeOff();
+        neoForgeDeathCancelled = false;
         super.die(cause);
+        if (neoForgeDeathCancelled)
+        {
+            neoForgeDeathCancelled = false;
+            return;
+        }
         setHealth(20);
         this.foodData = new FoodData();
         kill(this.getCombatTracker().getDeathMessage());
