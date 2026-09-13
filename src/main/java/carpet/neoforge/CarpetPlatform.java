@@ -227,11 +227,12 @@ public final class CarpetPlatform {
 
     private record StringVersion(String value) implements VersionValue {
         @Override public String friendlyString() { return value; }
-        @Override public int compareTo(VersionValue other) { return value.compareToIgnoreCase(other.friendlyString()); }
+        @Override public int compareTo(VersionValue other) { return value.compareTo(other.friendlyString()); }
     }
 
     private static final class SemanticVersion implements VersionValue {
         private static final int WILDCARD = Integer.MIN_VALUE;
+        private static final Pattern UNSIGNED_INTEGER = Pattern.compile("0|[1-9][0-9]*");
         private final String original;
         private final int[] components;
         private final String prerelease;
@@ -282,7 +283,7 @@ public final class CarpetPlatform {
 
         @Override
         public int compareTo(VersionValue other) {
-            if (!(other instanceof SemanticVersion semantic)) return original.compareToIgnoreCase(other.friendlyString());
+            if (!(other instanceof SemanticVersion semantic)) return original.compareTo(other.friendlyString());
             int count = Math.max(componentCount(), semantic.componentCount());
             for (int i = 0; i < count; i++) {
                 int left = component(i) == WILDCARD ? 0 : component(i);
@@ -304,12 +305,15 @@ public final class CarpetPlatform {
                 if (i >= r.length) return 1;
                 String a = l[i];
                 String b = r[i];
-                boolean aNumeric = a.chars().allMatch(Character::isDigit);
-                boolean bNumeric = b.chars().allMatch(Character::isDigit);
-                int cmp;
-                if (aNumeric && bNumeric) cmp = Integer.compare(Integer.parseInt(a), Integer.parseInt(b));
-                else if (aNumeric != bNumeric) cmp = aNumeric ? -1 : 1;
-                else cmp = a.compareToIgnoreCase(b);
+                boolean aNumeric = UNSIGNED_INTEGER.matcher(a).matches();
+                boolean bNumeric = UNSIGNED_INTEGER.matcher(b).matches();
+                if (aNumeric && bNumeric) {
+                    int cmp = Integer.compare(a.length(), b.length());
+                    if (cmp != 0) return cmp;
+                } else if (aNumeric != bNumeric) {
+                    return aNumeric ? -1 : 1;
+                }
+                int cmp = a.compareTo(b);
                 if (cmp != 0) return cmp;
             }
             return 0;
