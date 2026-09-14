@@ -220,8 +220,10 @@ jobs:
                   wait_break_marker "CARPET_BREAK_ATTEMPT_${mode^^}_CANCEL"
                   echo 'script in ci_break run check_cancel()' >&3
                   wait_break_marker "CARPET_BREAK_${mode^^}_CANCEL_OK"
-                  echo 'player CarpetSmoke attack once' >&3
+                  # Creative's action-pack delay advances on attack attempts.
+                  echo 'player CarpetSmoke attack continuous' >&3
                   wait_break_marker "CARPET_BREAK_ATTEMPT_${mode^^}_ALLOW"
+                  echo 'player CarpetSmoke stop' >&3
                   echo 'script in ci_break run check_allow()' >&3
                   wait_break_marker "CARPET_BREAK_${mode^^}_OK"
                 done
