@@ -186,29 +186,40 @@ jobs:
 
               if [ "$fake_spawned" -eq 1 ]; then
                 echo 'Production fake player logged in successfully.'
-                # A nearly broken tool detects cancellation that happens after
-                # NeoForge's mineBlock call. Also verify the creative branch and
-                # that ordinary harvesting still succeeds exactly once.
+                # Efficiency 10 makes attack-once break stone in one tick,
+                # while a single remaining durability point detects tool loss.
+                # Use actual player ticks: /script run suppresses event callbacks.
                 echo 'script load ci_break' >&3
-                for mode in survival creative; do
-                  echo "gamemode $mode CarpetSmoke" >&3
-                  echo 'item replace entity CarpetSmoke weapon.mainhand with minecraft:iron_pickaxe[minecraft:damage=249]' >&3
-                  echo "script in ci_break run test_breaks('${mode^^}')" >&3
-                  break_test_ok=0
+                wait_break_marker() {
+                  local marker="$1"
                   for _ in $(seq 1 30); do
-                    if grep -q "CARPET_BREAK_${mode^^}_OK" production-server.log logs/latest.log 2>/dev/null; then
-                      break_test_ok=1
-                      break
+                    if grep -q "$marker" production-server.log logs/latest.log 2>/dev/null; then
+                      return 0
                     fi
                     if grep -q 'CARPET_BREAK_FAILED' production-server.log logs/latest.log 2>/dev/null || ! kill -0 "$server_pid" 2>/dev/null; then
                       break
                     fi
                     sleep 1
                   done
-                  if [ "$break_test_ok" -ne 1 ]; then
-                    cat production-server.log
-                    exit 1
-                  fi
+                  cat production-server.log
+                  return 1
+                }
+                for mode in survival creative; do
+                  echo 'player CarpetSmoke stop' >&3
+                  echo 'fill 11 100 -1 13 104 1 minecraft:air' >&3
+                  echo 'setblock 12 99 0 minecraft:bedrock' >&3
+                  echo "gamemode $mode CarpetSmoke" >&3
+                  echo 'item replace entity CarpetSmoke weapon.mainhand with minecraft:iron_pickaxe[minecraft:damage=249,minecraft:enchantments={"minecraft:efficiency":10}]' >&3
+                  echo "script in ci_break run prepare('${mode^^}')" >&3
+                  echo 'tp CarpetSmoke 12.5 101 0.5 0 90' >&3
+                  echo 'player CarpetSmoke attack once' >&3
+                  wait_break_marker "CARPET_BREAK_ATTEMPT_${mode^^}_CANCEL"
+                  echo 'script in ci_break run check_cancel()' >&3
+                  wait_break_marker "CARPET_BREAK_${mode^^}_CANCEL_OK"
+                  echo 'player CarpetSmoke attack once' >&3
+                  wait_break_marker "CARPET_BREAK_ATTEMPT_${mode^^}_ALLOW"
+                  echo 'script in ci_break run check_allow()' >&3
+                  wait_break_marker "CARPET_BREAK_${mode^^}_OK"
                 done
                 echo 'script unload ci_break' >&3
 
