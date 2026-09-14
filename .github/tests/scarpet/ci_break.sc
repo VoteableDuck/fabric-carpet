@@ -34,7 +34,8 @@ check_allow() -> (
     p = player('CarpetSmoke');
     allowed = block(12, 100, 0) == 'air' && global_calls == 2;
     tool_ok = if(global_mode == 'SURVIVAL',
-        inventory_get(p, 0) == null,
+        // The broken pickaxe's slot may already hold the harvested cobblestone.
+        inventory_get(p, 0) == null || inventory_get(p, 0):0 != 'iron_pickaxe',
         str(inventory_get(p, 0)) == global_before
     );
     run('say CARPET_BREAK_' + if(allowed && tool_ok, global_mode + '_OK',
