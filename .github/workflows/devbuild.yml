@@ -186,7 +186,7 @@ jobs:
 
               if [ "$fake_spawned" -eq 1 ]; then
                 echo 'Production fake player logged in successfully.'
-                # Efficiency 10 makes attack-once break stone in one tick,
+                # Efficiency 100 makes attack-once break stone in one tick,
                 # while a single remaining durability point detects tool loss.
                 # Use actual player ticks: /script run suppresses event callbacks.
                 echo 'script load ci_break' >&3
@@ -209,9 +209,13 @@ jobs:
                   echo 'fill 11 100 -1 13 104 1 minecraft:air' >&3
                   echo 'setblock 12 99 0 minecraft:bedrock' >&3
                   echo "gamemode $mode CarpetSmoke" >&3
-                  echo 'item replace entity CarpetSmoke weapon.mainhand with minecraft:iron_pickaxe[minecraft:damage=249,minecraft:enchantments={"minecraft:efficiency":10}]' >&3
+                  echo 'item replace entity CarpetSmoke weapon.mainhand with minecraft:iron_pickaxe[minecraft:damage=249,minecraft:enchantments={"minecraft:efficiency":100}]' >&3
                   echo "script in ci_break run prepare('${mode^^}')" >&3
                   echo 'tp CarpetSmoke 12.5 101 0.5 0 90' >&3
+                  echo "say CARPET_BREAK_POSITIONED_${mode^^}" >&3
+                  wait_break_marker "CARPET_BREAK_POSITIONED_${mode^^}"
+                  # Let equipment attributes and teleport/ground state settle.
+                  sleep 1
                   echo 'player CarpetSmoke attack once' >&3
                   wait_break_marker "CARPET_BREAK_ATTEMPT_${mode^^}_CANCEL"
                   echo 'script in ci_break run check_cancel()' >&3
