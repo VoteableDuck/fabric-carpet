@@ -1,9 +1,7 @@
 package carpet.mixins;
 
 import carpet.fakes.ServerPlayerInteractionManagerInterface;
-import com.llamalad7.mixinextras.injector.ModifyReturnValue;
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,7 +17,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import static carpet.script.CarpetEventServer.Event.PLAYER_BREAK_BLOCK;
@@ -40,43 +37,24 @@ public class ServerPlayerGameMode_scarpetEventsMixin implements ServerPlayerInte
     @Shadow public ServerLevel level;
 
     /**
-     * NeoForge 1.21.11 replaces vanilla's direct Level#removeBlock call in
-     * destroyBlock with a patched ServerPlayerGameMode#removeBlock helper and
-     * invokes that helper from both the no-drops and normal harvesting paths.
-     * Keep a per-invocation cancellation bit so we can preserve Carpet's
-     * original destroyBlock=false contract without depending on NeoForge's
-     * changed local-variable layout.
+     * NeoForge damages the tool before calling its removeBlock helper. Cancelling
+     * at that helper is too late: the block survives but the tool can break.
+     * Run after NeoForge's BreakEvent and vanilla permission checks, before
+     * playerWillDestroy, tool damage, or removal can produce side effects.
+     * Returning directly also keeps nested harvest calls independent; no
+     * cancellation flag is shared on the player's game-mode instance.
      */
-    private boolean carpet$cancelBlockBreak;
-
-    @Inject(method = "destroyBlock", at = @At("HEAD"))
-    private void carpet$resetBlockBreakCancellation(BlockPos blockPos, CallbackInfoReturnable<Boolean> cir)
-    {
-        carpet$cancelBlockBreak = false;
-    }
-
-    @WrapOperation(
-            method = "destroyBlock",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/level/ServerPlayerGameMode;removeBlock(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;ZLnet/minecraft/world/item/ItemStack;)Z"
-            )
-    )
-    private boolean onBlockBroken(ServerPlayerGameMode instance, BlockPos blockPos, BlockState blockState, boolean canHarvest, ItemStack toolStack, Operation<Boolean> original)
+    @Inject(method = "destroyBlock", cancellable = true, at = @At(
+            value = "INVOKE",
+            target = "Lnet/minecraft/world/level/block/Block;playerWillDestroy(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/level/block/state/BlockState;"
+    ))
+    private void onBlockBroken(BlockPos blockPos, CallbackInfoReturnable<Boolean> cir, @Local BlockState blockState)
     {
         if (PLAYER_BREAK_BLOCK.onBlockBroken(player, blockPos, blockState))
         {
-            carpet$cancelBlockBreak = true;
             this.level.sendBlockUpdated(blockPos, blockState, blockState, 3);
-            return false;
+            cir.setReturnValue(false);
         }
-        return original.call(instance, blockPos, blockState, canHarvest, toolStack);
-    }
-
-    @ModifyReturnValue(method = "destroyBlock", at = @At("RETURN"))
-    private boolean carpet$preserveCancelledBreakResult(boolean original)
-    {
-        return carpet$cancelBlockBreak ? false : original;
     }
 
     @Inject(method = "useItemOn", at = @At(
